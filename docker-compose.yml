@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    volumes:
+      - .:/app
+    env_file: 
+      - ${ENV_FILE_PATH:-.env}
+    ports:
+      - "5001:5000"
+      - "5678:5679"   # debugpy用
+    environment:
+      - FLASK_APP=main
+      - FLASK_ENV=development
+      - FLASK_DEBUG_ATTACH=1

@@ -1,0 +1,23 @@
+# Webフレームワーク
+Flask==3.0.0
+
+# Twitter API
+tweepy==4.14.0
+
+# HTTP リクエスト
+requests==2.31.0
+
+# HTML解析
+beautifulsoup4==4.12.2
+
+# 環境変数管理
+python-dotenv==1.0.0
+
+# 画像処理（必要に応じて）
+Pillow==10.2.0
+
+# ログ設定
+colorlog==6.7.0
+
+gunicorn==20.1.0
+Werkzeug==3.0.1
