@@ -320,6 +320,11 @@ class XBot:
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=10,
             )
+            if response.status_code >= 400:
+                logger.error(
+                    "Twitter API v2 error response: "
+                    f"status={response.status_code}, body={response.text[:500]!r}"
+                )
             response.raise_for_status()
             logger.info("Twitter API v2でツイート投稿完了")
             return True
