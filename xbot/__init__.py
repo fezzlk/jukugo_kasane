@@ -93,12 +93,14 @@ class XBot:
 
         return jukugo
 
-    def post_question_by_date(self, date_str: str, test_mode: bool = False) -> bool:
+    def post_question_by_date(
+        self, date_str: str, test_mode: bool = False, skip_media: bool = False
+    ) -> bool:
         """スプレッドシートのdateから取得した熟語で問題投稿"""
         jukugo = self.get_jukugo_by_date(date_str)
         if not jukugo:
             return False
-        return self.post_question(jukugo, test_mode)
+        return self.post_question(jukugo, test_mode, skip_media=skip_media)
 
     def _cleanup_old_files(self) -> None:
         """生成済み画像ファイルを削除"""
@@ -287,7 +289,10 @@ class XBot:
             return None
 
     def post_tweet(
-        self, image_path: Optional[str] = None, status: str = "何の二字熟語の共通部分？"
+        self,
+        image_path: Optional[str] = None,
+        status: str = "何の二字熟語の共通部分？",
+        skip_media: bool = False,
     ) -> bool:
         """ツイートを投稿"""
         logger.info(f"ツイート投稿開始: image_path={image_path}, status={status}")
@@ -299,7 +304,7 @@ class XBot:
 
         try:
             media_ids = []
-            if image_path and os.path.exists(image_path):
+            if not skip_media and image_path and os.path.exists(image_path):
                 api = self._get_twitter_api()
                 if not api:
                     logger.error("Twitter API認証に失敗しました")
@@ -416,7 +421,9 @@ class XBot:
         logger.warning("A_から始まるファイルが見つかりませんでした")
         return None
 
-    def post_question(self, jukugo: str = "例題", test_mode: bool = False) -> bool:
+    def post_question(
+        self, jukugo: str = "例題", test_mode: bool = False, skip_media: bool = False
+    ) -> bool:
         """問題投稿の一連の処理"""
         try:
             logger.info(f"問題投稿開始: jukugo={jukugo}, test_mode={test_mode}")
@@ -436,7 +443,9 @@ class XBot:
                     return True
                 else:
                     logger.info(f"問題画像でツイート投稿開始: {q_path}")
-                    result = self.post_tweet(q_path, "何の二字熟語の共通部分？")
+                    result = self.post_tweet(
+                        q_path, "何の二字熟語の共通部分？", skip_media=skip_media
+                    )
                     logger.info(f"ツイート投稿結果: {result}")
                     return result
             else:

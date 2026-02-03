@@ -226,20 +226,23 @@ def post_question():
         jukugo = "例題"  # デフォルト値
 
         test_mode = False
+        skip_media = False
 
         if request.method == "GET":
             # GETリクエストの場合、クエリパラメータから取得
             jukugo = request.args.get("jukugo", "例題")
             test_mode = request.args.get("test", "false").lower() == "true"
+            skip_media = request.args.get("no_media", "false").lower() == "true"
         elif request.is_json:
             # POSTリクエストの場合、JSONボディから取得
             data = request.get_json()
             jukugo = data.get("jukugo", "例題")
             test_mode = data.get("test", False)
+            skip_media = data.get("no_media", False)
 
         logger.info(f"問題投稿リクエスト: jukugo={jukugo}, test_mode={test_mode}")
 
-        success = bot.post_question(jukugo, test_mode)
+        success = bot.post_question(jukugo, test_mode, skip_media=skip_media)
 
         if success:
             response_data = {
@@ -276,7 +279,8 @@ def post_question_by_date():
             date_str = jst_now.strftime("%Y/%m/%d")
 
         test_mode = request.args.get("test", "false").lower() == "true"
-        success = bot.post_question_by_date(date_str, test_mode)
+        skip_media = request.args.get("no_media", "false").lower() == "true"
+        success = bot.post_question_by_date(date_str, test_mode, skip_media=skip_media)
 
         if success:
             response_data = {
