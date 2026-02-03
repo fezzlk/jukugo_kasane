@@ -126,7 +126,7 @@ def _save_to_gcs(token_data: Dict[str, Any]) -> bool:
         "Content-Type": "application/json",
     }
     try:
-        response = requests.put(
+        response = requests.post(
             url,
             headers=headers,
             data=json.dumps(token_data, ensure_ascii=False).encode("utf-8"),
