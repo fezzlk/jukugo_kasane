@@ -23,6 +23,21 @@ def save_token_data(token_data: Dict[str, Any]) -> bool:
     return _save_to_file(token_data)
 
 
+def save_access_token(token_data: Dict[str, Any]) -> bool:
+    """Save access token only to file or GCS."""
+    access_token = token_data.get("access_token")
+    if not access_token:
+        logger.error("access token is missing")
+        return False
+    payload = {
+        "access_token": access_token,
+        "obtained_at": token_data.get("obtained_at"),
+    }
+    if _use_gcs():
+        return _save_to_gcs(payload, object_name=_get_access_object_name())
+    return _save_to_file(payload, file_path=_get_access_file_path())
+
+
 def _use_gcs() -> bool:
     return bool(os.getenv("TOKEN_GCS_BUCKET"))
 
@@ -32,6 +47,13 @@ def _get_token_file_path() -> str:
     if env_path:
         return env_path
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.json")
+
+
+def _get_access_file_path() -> str:
+    env_path = os.getenv("ACCESS_TOKEN_FILE_PATH")
+    if env_path:
+        return env_path
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "accesstoken.json")
 
 
 def _load_from_file() -> Optional[Dict[str, Any]]:
@@ -46,8 +68,8 @@ def _load_from_file() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _save_to_file(token_data: Dict[str, Any]) -> bool:
-    token_file_path = _get_token_file_path()
+def _save_to_file(token_data: Dict[str, Any], file_path: Optional[str] = None) -> bool:
+    token_file_path = file_path or _get_token_file_path()
     try:
         parent_dir = os.path.dirname(token_file_path)
         if parent_dir:
@@ -81,6 +103,10 @@ def _get_gcs_object_name() -> str:
     return os.getenv("TOKEN_GCS_OBJECT", "token.json")
 
 
+def _get_access_object_name() -> str:
+    return os.getenv("TOKEN_GCS_ACCESS_OBJECT", "accesstoken.json")
+
+
 def _load_from_gcs() -> Optional[Dict[str, Any]]:
     bucket = _get_gcs_bucket()
     if not bucket:
@@ -102,14 +128,16 @@ def _load_from_gcs() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _save_to_gcs(token_data: Dict[str, Any]) -> bool:
+def _save_to_gcs(
+    token_data: Dict[str, Any], object_name: Optional[str] = None
+) -> bool:
     bucket = _get_gcs_bucket()
     if not bucket:
         return False
     access_token = _get_gcs_access_token()
     if not access_token:
         return False
-    object_name = quote(_get_gcs_object_name(), safe="")
+    object_name = quote(object_name or _get_gcs_object_name(), safe="")
     url = (
         "https://storage.googleapis.com/upload/storage/v1/b/"
         f"{bucket}/o?uploadType=media&name={object_name}"

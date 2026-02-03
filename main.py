@@ -137,6 +137,8 @@ def oauth_callback():
     token_data["obtained_at"] = int(datetime.utcnow().timestamp())
     if not token_store.save_token_data(token_data):
         return jsonify({"status": "error", "message": "token save failed"}), 500
+    if not token_store.save_access_token(token_data):
+        return jsonify({"status": "error", "message": "access token save failed"}), 500
 
     return jsonify({"status": "success"})
 
