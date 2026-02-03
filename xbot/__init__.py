@@ -292,25 +292,36 @@ class XBot:
         """ツイートを投稿"""
         logger.info(f"ツイート投稿開始: image_path={image_path}, status={status}")
 
-        try:
-            api = self._get_twitter_api()
-            if not api:
-                logger.error("Twitter API認証に失敗しました")
-                return False
+        access_token = self._load_oauth2_access_token()
+        if not access_token:
+            logger.error("OAuth2 access tokenが取得できません")
+            return False
 
+        try:
             media_ids = []
             if image_path and os.path.exists(image_path):
+                api = self._get_twitter_api()
+                if not api:
+                    logger.error("Twitter API認証に失敗しました")
+                    return False
                 logger.info(f"画像ファイル存在確認: {image_path}")
                 logger.info("メディアアップロード開始")
                 media = api.media_upload(image_path)
                 logger.info(f"メディアアップロード完了: media_id={media.media_id}")
                 media_ids = [str(media.media_id)]
 
+            payload = {"text": status}
             if media_ids:
-                api.update_status(status=status, media_ids=media_ids)
-            else:
-                api.update_status(status=status)
-            logger.info("Twitter API v1.1でツイート投稿完了")
+                payload["media"] = {"media_ids": media_ids}
+
+            response = requests.post(
+                "https://api.twitter.com/2/tweets",
+                json=payload,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            logger.info("Twitter API v2でツイート投稿完了")
             return True
         except Exception as e:
             logger.error(f"ツイート投稿エラー: {e}", exc_info=True)
