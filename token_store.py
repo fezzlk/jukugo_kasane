@@ -74,18 +74,11 @@ def _get_gcs_access_token() -> Optional[str]:
 
 
 def _get_gcs_bucket() -> Optional[str]:
-    bucket = os.getenv("TOKEN_GCS_BUCKET")
-    if bucket:
-        logger.info(f"token gcs bucket: {bucket!r}")
-    else:
-        logger.error("TOKEN_GCS_BUCKET is not set")
-    return bucket
+    return os.getenv("TOKEN_GCS_BUCKET")
 
 
 def _get_gcs_object_name() -> str:
-    object_name = os.getenv("TOKEN_GCS_OBJECT", "token.json")
-    logger.info(f"token gcs object: {object_name!r}")
-    return object_name
+    return os.getenv("TOKEN_GCS_OBJECT", "token.json")
 
 
 def _load_from_gcs() -> Optional[Dict[str, Any]]:
@@ -132,11 +125,6 @@ def _save_to_gcs(token_data: Dict[str, Any]) -> bool:
             data=json.dumps(token_data, ensure_ascii=False).encode("utf-8"),
             timeout=5,
         )
-        if response.status_code >= 400:
-            logger.error(
-                "gcs token write response: "
-                f"status={response.status_code}, body={response.text[:200]!r}"
-            )
         response.raise_for_status()
         return True
     except Exception as exc:
