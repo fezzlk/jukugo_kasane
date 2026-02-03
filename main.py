@@ -400,6 +400,33 @@ def get_random_jukugo():
         return jsonify(response_data), 500
 
 
+@app.route("/diagnostics/oauth2", methods=["GET"])
+def diagnostics_oauth2():
+    """OAuth2 access token sanity check."""
+    try:
+        access_token = bot._load_oauth2_access_token()
+        if not access_token:
+            return jsonify({"status": "error", "message": "access token missing"}), 500
+
+        response = requests.get(
+            "https://api.twitter.com/2/users/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "http_status": response.status_code,
+                    "body": response.text,
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """404エラーハンドラー"""
