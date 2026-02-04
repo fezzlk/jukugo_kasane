@@ -22,6 +22,7 @@ from xbot import XBot
 import token_store
 from line import store as line_store
 from line.handler import LineHandler
+from line.image_store import GcsImageStore, LocalImageStore
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "")
@@ -41,6 +42,9 @@ oauth_scopes = "tweet.write users.read offline.access"
 line_channel_secret = os.getenv("LINE_CHANNEL_SECRET", "")
 line_channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 line_default_font_key = "default"
+line_image_storage = os.getenv("LINE_IMAGE_STORAGE", "local").strip().lower()
+line_gcs_bucket = os.getenv("LINE_GCS_BUCKET", "")
+line_gcs_prefix = os.getenv("LINE_GCS_PREFIX", "line-images")
 
 
 def build_generate_url(word, font_key):
@@ -109,6 +113,11 @@ line_keywords = {
     "answer": "答え",
 }
 
+if line_image_storage == "gcs":
+    line_image_store = GcsImageStore(line_gcs_bucket, line_gcs_prefix, logger)
+else:
+    line_image_store = LocalImageStore(server_fqdn)
+
 line_handler = LineHandler(
     channel_secret=line_channel_secret,
     channel_access_token=line_channel_access_token,
@@ -120,6 +129,7 @@ line_handler = LineHandler(
     keywords=line_keywords,
     quick_reply_builder=build_line_quick_reply,
     default_font_key=line_default_font_key,
+    image_store=line_image_store,
 )
 
 

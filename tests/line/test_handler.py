@@ -12,6 +12,7 @@ class DummyGenerator:
 
     def generate_images(self, word, font_key):
         self.calls.append((word, font_key))
+        return (f"/tmp/Q_{word}.png", f"/tmp/A_{word}.png")
 
     def normalize_font_key(self, text):
         if text not in ("default", "mincho"):
@@ -53,6 +54,19 @@ def _sign(body: bytes, secret: str) -> str:
 
 
 def _build_handler(store, generator, logger, quick_reply_builder):
+    class DummyImageStore:
+        def __init__(self):
+            self.calls = []
+            self.cleaned = []
+
+        def get_image_url(self, kind, word, font_key, local_path):
+            self.calls.append((kind, word, font_key, local_path))
+            return f"https://example.com/{kind}/{word}"
+
+        def cleanup(self, paths):
+            self.cleaned.append(list(paths))
+
+    image_store = DummyImageStore()
     return LineHandler(
         channel_secret="secret",
         channel_access_token="token",
@@ -80,6 +94,7 @@ def _build_handler(store, generator, logger, quick_reply_builder):
         },
         quick_reply_builder=quick_reply_builder,
         default_font_key="default",
+        image_store=image_store,
     )
 
 

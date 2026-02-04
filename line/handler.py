@@ -1,6 +1,5 @@
 import json
-from urllib.parse import quote
-
+from line.image_store import BaseImageStore
 from line.parser import LineCommandParser
 from line.reply import LineReplyClient
 from line.signature import verify_signature
@@ -23,15 +22,12 @@ class LineHandler:
         keywords: Dict[str, object],
         quick_reply_builder: Callable[[], Optional[dict]],
         default_font_key: str = "default",
+        image_store: Optional[BaseImageStore] = None,
         parser: Optional[LineCommandParser] = None,
         reply_client: Optional[LineReplyClient] = None,
     ) -> None:
         """Initialize LINE handler dependencies and configuration."""
         self.channel_secret = channel_secret
-        normalized_fqdn = server_fqdn.rstrip("/")
-        if normalized_fqdn.startswith("http://"):
-            normalized_fqdn = "https://" + normalized_fqdn[len("http://") :]
-        self.server_fqdn = normalized_fqdn
         self.generator = generator
         self.settings_store = settings_store
         self.logger = logger
@@ -40,6 +36,9 @@ class LineHandler:
         self.quick_reply_builder = quick_reply_builder
         self.default_font_key = default_font_key
 
+        if image_store is None:
+            raise ValueError("image_store is required.")
+        self.image_store = image_store
         self.parser = parser or LineCommandParser(keywords)
         self.reply_client = reply_client or LineReplyClient(
             channel_access_token, logger
@@ -148,15 +147,20 @@ class LineHandler:
                 )
                 return
             try:
-                self.generator.generate_images(word, font_key)
+                q_path, a_path = self.generator.generate_images(word, font_key)
                 messages = []
                 if command["type"] in ("question", "both"):
-                    q_url = self._build_image_url(word, "q", font_key)
+                    q_url = self.image_store.get_image_url(
+                        "q", word, font_key, q_path
+                    )
                     messages.append(self._image_message(q_url))
                 if command["type"] in ("answer", "both"):
-                    a_url = self._build_image_url(word, "a", font_key)
+                    a_url = self.image_store.get_image_url(
+                        "a", word, font_key, a_path
+                    )
                     messages.append(self._image_message(a_url))
                 self._reply(reply_token, messages)
+                self.image_store.cleanup([q_path, a_path])
             except Exception as exc:
                 self.logger.error("LINE image generate error: %s", exc)
                 err = f"{self.texts.get('error_prefix', '')}{exc}"
@@ -200,18 +204,6 @@ class LineHandler:
         settings = self.settings_store.load_settings()
         settings[user_key] = user_settings
         return self.settings_store.save_settings(settings)
-
-    def _build_image_url(self, word: str, kind: str, font_key: str) -> str:
-        """Build a public image URL for LINE message payloads."""
-        if not self.server_fqdn:
-            raise ValueError("SERVER_FQDN is required for LINE image replies.")
-        if not self.server_fqdn.startswith("https://"):
-            raise ValueError("SERVER_FQDN must start with https:// for LINE images.")
-        safe_word = quote(word)
-        font_param = ""
-        if font_key and font_key != "default":
-            font_param = f"?font={font_key}"
-        return f"{self.server_fqdn}/{kind}/{safe_word}{font_param}"
 
     def _normalize_font_key(self, text: str) -> str:
         """Normalize and validate a font key string."""
