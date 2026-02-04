@@ -20,6 +20,8 @@ from flask import (
 from image_generator import ImageGenerator
 from xbot import XBot
 import token_store
+from line import store as line_store
+from line.handler import LineHandler
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "")
@@ -36,6 +38,9 @@ server_fqdn = os.getenv("SERVER_FQDN", "").rstrip("/")
 oauth_client_id = os.getenv("X_CLIENT_ID", "")
 oauth_client_secret = os.getenv("X_CLIENT_SECRET", "")
 oauth_scopes = "tweet.write users.read offline.access"
+line_channel_secret = os.getenv("LINE_CHANNEL_SECRET", "")
+line_channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+line_default_font_key = "default"
 
 
 def build_generate_url(word, font_key):
@@ -55,6 +60,67 @@ def build_oauth_redirect_uri():
 def build_code_challenge(code_verifier: str) -> str:
     digest = hashlib.sha256(code_verifier.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("utf-8")
+
+
+def build_line_usage_text() -> str:
+    return (
+        "使い方:\n"
+        "1. 二字熟語だけ送ると、問題画像を返します。\n"
+        "2. 問題 <熟語> / 答え <熟語> で片方だけ。\n"
+        "3. フォント <key> でフォント設定。\n"
+        "例: 問題 春夏, 答え 春夏, フォント mincho\n"
+        "フォント一覧: default, mincho, monogothic, hiragino, dejavu"
+    )
+
+
+def build_line_quick_reply() -> dict:
+    items = []
+    for font_key in generator.get_font_keys():
+        items.append(
+            {
+                "type": "action",
+                "action": {
+                    "type": "message",
+                    "label": f"font:{font_key}",
+                    "text": f"フォント {font_key}",
+                },
+            }
+        )
+    return {"items": items}
+
+
+line_texts = {
+    "welcome_prefix": "友だち追加ありがとうございます。\n",
+    "usage": build_line_usage_text(),
+    "settings_updated": "設定を更新しました: {settings}",
+    "font_set": "フォントを {font} に設定しました。",
+    "save_failed": "設定の保存に失敗しました。",
+    "need_word": "熟語を指定してください。",
+    "error_prefix": "エラー: ",
+    "invalid_signature": "Invalid signature",
+    "bad_request": "Bad Request",
+}
+
+line_keywords = {
+    "help": ["使い方", "ヘルプ", "help"],
+    "setting": "設定",
+    "font": "フォント",
+    "question": "問題",
+    "answer": "答え",
+}
+
+line_handler = LineHandler(
+    channel_secret=line_channel_secret,
+    channel_access_token=line_channel_access_token,
+    server_fqdn=server_fqdn,
+    generator=generator,
+    settings_store=line_store,
+    logger=logger,
+    texts=line_texts,
+    keywords=line_keywords,
+    quick_reply_builder=build_line_quick_reply,
+    default_font_key=line_default_font_key,
+)
 
 
 @app.route("/")
@@ -218,6 +284,29 @@ def get_a(word):
 def health_check():
     """ヘルスチェック"""
     return {"status": "healthy", "service": "kasane-web", "version": "2.0.0"}
+
+
+def _handle_line_callback():
+    """LINE Messaging API webhook"""
+    body = request.get_data()
+    signature = request.headers.get("X-Line-Signature", "")
+    response_text, status_code = line_handler.handle_callback(body, signature)
+    return response_text, status_code
+
+
+@app.route("/line/callback", methods=["POST"])
+def line_callback():
+    return _handle_line_callback()
+
+
+@app.route("/callback", methods=["POST"])
+def line_callback_alias():
+    return _handle_line_callback()
+
+
+@app.route("/", methods=["POST"])
+def line_callback_root():
+    return _handle_line_callback()
 
 
 @app.route("/question", methods=["GET", "POST"])
