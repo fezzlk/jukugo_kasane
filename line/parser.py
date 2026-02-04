@@ -36,7 +36,7 @@ class LineCommandParser:
             return {"type": "answer", "word": word.strip()}
 
         if len(stripped) == 2:
-            return {"type": "question", "word": stripped}
+            return {"type": "both", "word": stripped}
 
         return {"type": "unknown"}
 

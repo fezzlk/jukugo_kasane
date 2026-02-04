@@ -149,6 +149,10 @@ class LineHandler:
             try:
                 q_path, a_path = self.generator.generate_images(word, font_key)
                 messages = []
+                if command["type"] == "both":
+                    messages.append(
+                        self._text_message(f"「{word}」の共通部分です。")
+                    )
                 if command["type"] in ("question", "both"):
                     q_url = self.image_store.get_image_url(
                         "q", word, font_key, q_path

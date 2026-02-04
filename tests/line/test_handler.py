@@ -135,7 +135,7 @@ def test_follow_event_sends_welcome_message(monkeypatch):
     assert "quickReply" in messages[0]
 
 
-def test_text_message_returns_question_image_only(monkeypatch):
+def test_text_message_returns_text_and_both_images(monkeypatch):
     store = InMemoryStore()
     generator = DummyGenerator()
     logger = DummyLogger()
@@ -165,8 +165,10 @@ def test_text_message_returns_question_image_only(monkeypatch):
     assert status == 200
     assert generator.calls == [("ab", "default")]
     messages = captured["json"]["messages"]
-    assert len(messages) == 1
-    assert messages[0]["originalContentUrl"].endswith("/q/ab")
+    assert len(messages) == 3
+    assert messages[0]["type"] == "text"
+    assert messages[1]["originalContentUrl"].endswith("/q/ab")
+    assert messages[2]["originalContentUrl"].endswith("/a/ab")
 
 
 def test_font_command_updates_user_setting(monkeypatch):
@@ -340,7 +342,7 @@ def test_invalid_font_replies_with_error(monkeypatch):
         captured["json"] = json
         return DummyResponse()
 
-    monkeypatch.setattr("line.handler.requests.post", fake_post)
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None)
     payload = {
