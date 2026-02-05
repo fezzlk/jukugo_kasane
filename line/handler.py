@@ -96,6 +96,10 @@ class LineHandler:
             msg = self._text_message(self.texts.get("usage", ""), True)
             self._reply(reply_token, [msg])
             return
+        if command["type"] == "invalid_word":
+            msg = self._text_message(self.texts.get("invalid_word", ""))
+            self._reply(reply_token, [msg])
+            return
 
         if command["type"] == "setting":
             setting = command["setting"]
@@ -171,7 +175,7 @@ class LineHandler:
                 self._reply(reply_token, [self._text_message(err)])
             return
 
-        msg = self._text_message(self.texts.get("usage", ""), True)
+        msg = self._text_message(self.texts.get("not_two_chars", ""))
         self._reply(reply_token, [msg])
 
     def _text_message(self, text: str, include_quick_reply: bool = False) -> dict:

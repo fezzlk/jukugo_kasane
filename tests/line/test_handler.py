@@ -81,6 +81,8 @@ def _build_handler(store, generator, logger, quick_reply_builder):
             "font_set": "FONT {font}",
             "save_failed": "SAVE FAILED",
             "need_word": "NEED WORD",
+            "not_two_chars": "NOT TWO CHARS",
+            "invalid_word": "INVALID WORD",
             "error_prefix": "ERROR: ",
             "invalid_signature": "INVALID",
             "bad_request": "BAD",
@@ -361,3 +363,65 @@ def test_invalid_font_replies_with_error(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     assert captured["json"]["messages"][0]["text"] == "invalid font"
+
+
+def test_not_two_chars_returns_notice(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "abc"},
+                "source": {"userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "NOT TWO CHARS"
+
+
+def test_invalid_word_replies_with_notice(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "a!"},
+                "source": {"userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "INVALID WORD"

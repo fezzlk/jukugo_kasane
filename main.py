@@ -52,7 +52,11 @@ def build_generate_url(word, font_key):
     if font_key and font_key != "default":
         query["font"] = font_key
     query_string = urlencode(query)
-    return f"{server_fqdn}/generate?{query_string}" if server_fqdn else f"/generate?{query_string}"
+    return (
+        f"{server_fqdn}/generate?{query_string}"
+        if server_fqdn
+        else f"/generate?{query_string}"
+    )
 
 
 def build_oauth_redirect_uri():
@@ -100,6 +104,8 @@ line_texts = {
     "font_set": "フォントを {font} に設定しました。",
     "save_failed": "設定の保存に失敗しました。",
     "need_word": "熟語を指定してください。",
+    "not_two_chars": "二字熟語を送るとその共通部分を返します。",
+    "invalid_word": "使用できない文字が含まれています。",
     "error_prefix": "エラー: ",
     "invalid_signature": "Invalid signature",
     "bad_request": "Bad Request",
