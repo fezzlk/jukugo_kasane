@@ -362,7 +362,17 @@ class ImageGenerator:
             "yuv420p",
             output_path,
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(
+                cmd,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.error("ffmpeg error: %s", exc.stderr)
+            raise
 
 
 # Flask アプリケーションのルート定義

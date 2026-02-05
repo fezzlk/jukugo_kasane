@@ -1,5 +1,4 @@
 import json
-import re
 
 from line.image_store import BaseImageStore
 from line.parser import LineCommandParser
@@ -435,18 +434,23 @@ class LineHandler:
             return
         sender_id = event.get("source", {}).get("userId", "")
         sender_key = f"user:{sender_id}" if sender_id else user_key
-        tokens = text.split()
+        remaining_text = self._strip_mention_text(text, mentionees).strip()
+        tokens = remaining_text.split()
         last_token = tokens[-1] if tokens else ""
 
         if self._is_bot_mentioned(message):
-            number = int(last_token) if last_token.isdigit() else 0
+            number_text = remaining_text if remaining_text and not tokens else last_token
+            number = int(number_text) if number_text.isdigit() else 0
             if number < 1 or number > 10:
                 msg = self._text_message(self.texts.get("invalid_number", ""))
                 self._reply(reply_token, [msg])
                 return
             stored_word = self.quiz_store.get_word(sender_key, number)
             if not stored_word:
-                msg = self._text_message(f"{number}問目は未登録です。")
+                template = self.texts.get(
+                    "unregistered_template", "{number}問目は未登録です。"
+                )
+                msg = self._text_message(template.format(number=number))
                 self._reply(reply_token, [msg])
                 return
             sender_settings = self._get_user_settings(sender_key)
@@ -473,15 +477,25 @@ class LineHandler:
                     self.image_store.cleanup([q_path, a_path])
             except Exception as exc:
                 self.logger.error("LINE group quiz generate error: %s", exc)
+                generate_failed = self.texts.get(
+                    "generate_failed", "画像の生成に失敗しました。"
+                )
+                err = f"{self.texts.get('error_prefix', '')}{generate_failed}"
+                self._reply(reply_token, [self._text_message(err)])
             return
 
         if len(mentionees) == 1:
             target_id = mentionees[0].get("userId", "")
             if target_id and target_id != self.bot_user_id:
-                quiz_status = self._parse_quiz_message(last_token)
+                answer_text = remaining_text if remaining_text and not tokens else last_token
+                quiz_status = self._parse_quiz_message(answer_text)
                 if not quiz_status or quiz_status[0] != "ok":
+                    answer_format = self.texts.get(
+                        "answer_format",
+                        "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)",
+                    )
                     msg = self._text_message(
-                        "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)"
+                        answer_format
                     )
                     self._reply(reply_token, [msg])
                     return
@@ -561,9 +575,10 @@ class LineHandler:
 
     def _build_quiz_list_text(self, user_key: str) -> str:
         items = self.quiz_store.list_words(user_key)
+        unset_label = self.texts.get("quiz_unset", "未設定")
         lines = ["問題集"]
         for number in range(1, 11):
-            word = items.get(number, "未設定")
+            word = items.get(number, unset_label)
             lines.append(f"{number}. {word}")
         return "\n".join(lines)
 
@@ -577,7 +592,7 @@ class LineHandler:
     def _build_mention_message(
         self, user_id: str, result: str, display_name: str = ""
     ) -> dict:
-        name = display_name or "user"
+        name = display_name or self.texts.get("mention_fallback", "ユーザー")
         text = f"@{name} {result}"
         if not user_id:
             return {"type": "text", "text": result}
@@ -590,3 +605,19 @@ class LineHandler:
                 ]
             },
         }
+
+    def _strip_mention_text(self, text: str, mentionees: list) -> str:
+        """Remove mention tokens from the message text."""
+        if not mentionees:
+            return text
+        trimmed = text
+        for mentionee in sorted(
+            (m for m in mentionees if isinstance(m, dict)),
+            key=lambda m: m.get("index", 0),
+            reverse=True,
+        ):
+            index = mentionee.get("index")
+            length = mentionee.get("length")
+            if isinstance(index, int) and isinstance(length, int) and length > 0:
+                trimmed = trimmed[:index] + trimmed[index + length :]
+        return trimmed
