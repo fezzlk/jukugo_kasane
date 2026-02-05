@@ -3,3 +3,4 @@ token.json
 __pycache__/
 line_settings.json
 line/line_settings.json
+line/quiz.db

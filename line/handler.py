@@ -1,4 +1,6 @@
 import json
+import re
+
 from line.image_store import BaseImageStore
 from line.parser import LineCommandParser
 from line.reply import LineReplyClient
@@ -23,6 +25,8 @@ class LineHandler:
         quick_reply_builder: Callable[[], Optional[dict]],
         default_font_key: str = "default",
         image_store: Optional[BaseImageStore] = None,
+        quiz_store: Optional[object] = None,
+        bot_user_id: str = "",
         parser: Optional[LineCommandParser] = None,
         reply_client: Optional[LineReplyClient] = None,
     ) -> None:
@@ -39,6 +43,10 @@ class LineHandler:
         if image_store is None:
             raise ValueError("image_store is required.")
         self.image_store = image_store
+        if quiz_store is None:
+            raise ValueError("quiz_store is required.")
+        self.quiz_store = quiz_store
+        self.bot_user_id = bot_user_id
         self.parser = parser or LineCommandParser(keywords)
         self.reply_client = reply_client or LineReplyClient(
             channel_access_token, logger
@@ -88,10 +96,12 @@ class LineHandler:
             return
 
         user_key = self._get_user_key(event)
+        source_type = event.get("source", {}).get("type")
         user_settings = self._get_user_settings(user_key)
         font_key = user_settings.get("font", self.default_font_key)
 
-        command = self.parser.parse(message.get("text", ""))
+        text = message.get("text", "")
+        command = self.parser.parse(text)
         if command["type"] == "help":
             msg = self._text_message(self.texts.get("usage", ""), True)
             self._reply(reply_token, [msg])
@@ -100,6 +110,70 @@ class LineHandler:
             msg = self._text_message(self.texts.get("invalid_word", ""))
             self._reply(reply_token, [msg])
             return
+        if command["type"] == "list":
+            if source_type == "user":
+                msg = self._text_message(self._build_quiz_list_text(user_key))
+                self._reply(reply_token, [msg])
+            return
+
+        if source_type == "user":
+            set_payload = self._parse_quiz_set(text)
+            if set_payload:
+                number, word = set_payload
+                if number == -1:
+                    msg = self._text_message(self.texts.get("invalid_word", ""))
+                    self._reply(reply_token, [msg])
+                    return
+                old_word = self.quiz_store.set_word(user_key, number, word)
+                msg = self._text_message(
+                    self._build_set_reply_text(number, word, old_word)
+                )
+                self._reply(reply_token, [msg])
+                return
+
+        if source_type in ("group", "room"):
+            if self._is_group_quiz_enabled():
+                if self._is_bot_mentioned(message):
+                    number = self._extract_quiz_number(text)
+                    if number:
+                        sender_id = event.get("source", {}).get("userId", "")
+                        sender_key = f"user:{sender_id}" if sender_id else user_key
+                        stored_word = self.quiz_store.get_word(sender_key, number)
+                        if stored_word:
+                            try:
+                                q_path, a_path = self.generator.generate_images(
+                                    stored_word, font_key
+                                )
+                                q_url = self.image_store.get_image_url(
+                                    "q", stored_word, font_key, q_path
+                                )
+                                self._reply(reply_token, [self._image_message(q_url)])
+                                self.image_store.cleanup([q_path, a_path])
+                            except Exception as exc:
+                                self.logger.error(
+                                    "LINE group quiz generate error: %s", exc
+                                )
+                        return
+            answer_payload = self._parse_answer_submission(event)
+            if answer_payload:
+                if answer_payload[0] == "invalid":
+                    sender_user_id = answer_payload[1]
+                    mention = self._build_mention_message(
+                        sender_user_id, self.texts.get("invalid_word", "")
+                    )
+                    self._reply(reply_token, [mention])
+                    return
+                target_user_id, sender_user_id, number, word = answer_payload
+                stored_word = self.quiz_store.get_word(
+                    f"user:{target_user_id}", number
+                )
+                if stored_word and stored_word == word:
+                    result = self.texts.get("answer_correct", "正解")
+                else:
+                    result = self.texts.get("answer_incorrect", "不正解")
+                mention = self._build_mention_message(sender_user_id, result)
+                self._reply(reply_token, [mention])
+                return
 
         if command["type"] == "setting":
             setting = command["setting"]
@@ -149,6 +223,10 @@ class LineHandler:
                 self._reply(
                     reply_token, [self._text_message(self.texts.get("need_word", ""))]
                 )
+                return
+            if len(word) == 2 and not self.parser._is_allowed_word(word):
+                msg = self._text_message(self.texts.get("invalid_word", ""))
+                self._reply(reply_token, [msg])
                 return
             try:
                 q_path, a_path = self.generator.generate_images(word, font_key)
@@ -216,3 +294,88 @@ class LineHandler:
     def _normalize_font_key(self, text: str) -> str:
         """Normalize and validate a font key string."""
         return self.generator.normalize_font_key(text.strip().lower())
+
+    def _parse_quiz_set(self, text: str) -> Optional[tuple]:
+        match = self._match_quiz_pattern(text)
+        if not match:
+            return None
+        number, word = match
+        if not self.parser._is_allowed_word(word):
+            return (-1, word)
+        return number, word
+
+    def _build_set_reply_text(self, number: int, word: str, old_word: str) -> str:
+        if old_word:
+            return f"第{number}問目に「{word}」をセットしました。元の熟語「{old_word}」を削除しました。"
+        return f"第{number}問目に「{word}」をセットしました。"
+
+    def _build_quiz_list_text(self, user_key: str) -> str:
+        items = self.quiz_store.list_words(user_key)
+        lines = ["問題集"]
+        for number in range(1, 11):
+            word = items.get(number, "未設定")
+            lines.append(f"{number}. {word}")
+        return "\n".join(lines)
+
+    def _is_group_quiz_enabled(self) -> bool:
+        return bool(self.bot_user_id)
+
+    def _is_bot_mentioned(self, message: dict) -> bool:
+        mentionees = (
+            message.get("mention", {}).get("mentionees", [])
+            if message
+            else []
+        )
+        for mentionee in mentionees:
+            if mentionee.get("userId") == self.bot_user_id:
+                return True
+        return False
+
+    def _extract_quiz_number(self, text: str) -> int:
+        match = re.search(r"\b(10|[1-9])\b", text)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    def _parse_answer_submission(self, event: dict) -> Optional[tuple]:
+        message = event.get("message", {})
+        text = message.get("text", "")
+        mentionees = message.get("mention", {}).get("mentionees", [])
+        target = None
+        sender_user_id = event.get("source", {}).get("userId", "")
+        for mentionee in mentionees:
+            user_id = mentionee.get("userId")
+            if user_id and user_id != self.bot_user_id:
+                target = user_id
+                break
+        if not target:
+            return None
+        match = self._match_quiz_pattern(text)
+        if not match:
+            return None
+        number, word = match
+        if not self.parser._is_allowed_word(word):
+            return ("invalid", sender_user_id)
+        return target, sender_user_id, number, word
+
+    def _build_mention_message(self, user_id: str, result: str) -> dict:
+        text = f"@user {result}"
+        if not user_id:
+            return {"type": "text", "text": result}
+        return {
+            "type": "text",
+            "text": text,
+            "mention": {
+                "mentionees": [
+                    {"index": 0, "length": 5, "userId": user_id},
+                ]
+            },
+        }
+
+    def _match_quiz_pattern(self, text: str) -> Optional[tuple]:
+        match = re.search(r"(10|[1-9])\.(..)", text)
+        if not match:
+            return None
+        number = int(match.group(1))
+        word = match.group(2)
+        return number, word

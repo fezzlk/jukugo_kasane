@@ -21,6 +21,10 @@ class LineCommandParser:
             _, _, font_value = stripped.partition(" ")
             return {"type": "font", "value": font_value.strip()}
 
+        list_keyword = str(self.keywords.get("list", ""))
+        if list_keyword and stripped == list_keyword:
+            return {"type": "list"}
+
         question_keyword = str(self.keywords.get("question", ""))
         if stripped.startswith(question_keyword):
             _, _, word = stripped.partition(" ")

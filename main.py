@@ -23,6 +23,7 @@ import token_store
 from line import store as line_store
 from line.handler import LineHandler
 from line.image_store import GcsImageStore, LocalImageStore
+from line.quiz_store import FirestoreQuizStore, SqliteQuizStore
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "")
@@ -45,6 +46,10 @@ line_default_font_key = "default"
 line_image_storage = os.getenv("LINE_IMAGE_STORAGE", "local").strip().lower()
 line_gcs_bucket = os.getenv("LINE_GCS_BUCKET", "")
 line_gcs_prefix = os.getenv("LINE_GCS_PREFIX", "line-images")
+line_bot_user_id = os.getenv("LINE_BOT_USER_ID", "").strip()
+line_quiz_db_path = os.getenv("LINE_QUIZ_DB_PATH", "line/quiz.db").strip()
+line_quiz_store_mode = os.getenv("LINE_QUIZ_STORE", "sqlite").strip().lower()
+line_firestore_project = os.getenv("LINE_FIRESTORE_PROJECT", "").strip()
 
 
 def build_generate_url(word, font_key):
@@ -106,6 +111,8 @@ line_texts = {
     "need_word": "熟語を指定してください。",
     "not_two_chars": "二字熟語を送るとその共通部分を返します。",
     "invalid_word": "使用できない文字が含まれています。",
+    "answer_correct": "正解",
+    "answer_incorrect": "不正解",
     "error_prefix": "エラー: ",
     "invalid_signature": "Invalid signature",
     "bad_request": "Bad Request",
@@ -117,12 +124,20 @@ line_keywords = {
     "font": "フォント",
     "question": "問題",
     "answer": "答え",
+    "list": "問題集",
 }
 
 if line_image_storage == "gcs":
     line_image_store = GcsImageStore(line_gcs_bucket, line_gcs_prefix, logger)
 else:
     line_image_store = LocalImageStore(server_fqdn)
+
+if line_quiz_store_mode == "firestore":
+    line_quiz_store = FirestoreQuizStore(line_firestore_project, logger)
+else:
+    line_quiz_store = SqliteQuizStore(line_quiz_db_path, logger)
+if not line_bot_user_id:
+    logger.warning("LINE_BOT_USER_ID is missing; group quiz is disabled.")
 
 line_handler = LineHandler(
     channel_secret=line_channel_secret,
@@ -136,6 +151,8 @@ line_handler = LineHandler(
     quick_reply_builder=build_line_quick_reply,
     default_font_key=line_default_font_key,
     image_store=line_image_store,
+    quiz_store=line_quiz_store,
+    bot_user_id=line_bot_user_id,
 )
 
 
