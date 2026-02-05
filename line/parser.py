@@ -25,6 +25,26 @@ class LineCommandParser:
         if list_keyword and stripped == list_keyword:
             return {"type": "list"}
 
+        menu_generate = str(self.keywords.get("menu_generate", ""))
+        if menu_generate and stripped == menu_generate:
+            return {"type": "menu_generate"}
+
+        menu_register = str(self.keywords.get("menu_register", ""))
+        if menu_register and stripped == menu_register:
+            return {"type": "menu_register"}
+
+        menu_list = str(self.keywords.get("menu_list", ""))
+        if menu_list and stripped == menu_list:
+            return {"type": "menu_list"}
+
+        menu_settings = str(self.keywords.get("menu_settings", ""))
+        if menu_settings and stripped == menu_settings:
+            return {"type": "menu_settings"}
+
+        menu_usage = str(self.keywords.get("menu_usage", ""))
+        if menu_usage and stripped == menu_usage:
+            return {"type": "menu_usage"}
+
         question_keyword = str(self.keywords.get("question", ""))
         if stripped.startswith(question_keyword):
             _, _, word = stripped.partition(" ")

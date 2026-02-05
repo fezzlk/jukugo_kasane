@@ -27,6 +27,7 @@ class LineHandler:
         image_store: Optional[BaseImageStore] = None,
         quiz_store: Optional[object] = None,
         bot_user_id: str = "",
+        settings_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
         parser: Optional[LineCommandParser] = None,
         reply_client: Optional[LineReplyClient] = None,
     ) -> None:
@@ -38,6 +39,7 @@ class LineHandler:
         self.texts = texts
         self.keywords = keywords
         self.quick_reply_builder = quick_reply_builder
+        self.settings_quick_reply_builder = settings_quick_reply_builder
         self.default_font_key = default_font_key
 
         if image_store is None:
@@ -104,6 +106,31 @@ class LineHandler:
         command = self.parser.parse(text)
         if command["type"] == "help":
             msg = self._text_message(self.texts.get("usage", ""), True)
+            self._reply(reply_token, [msg])
+            return
+        if command["type"] == "menu_generate":
+            msg = self._text_message(self.texts.get("generate_prompt", ""))
+            self._reply(reply_token, [msg])
+            return
+        if command["type"] == "menu_register":
+            msg = self._text_message(self.texts.get("register_help", ""))
+            self._reply(reply_token, [msg])
+            return
+        if command["type"] == "menu_list":
+            if source_type == "user":
+                msg = self._text_message(self._build_quiz_list_text(user_key))
+                self._reply(reply_token, [msg])
+            return
+        if command["type"] == "menu_settings":
+            message = self._text_message(self.texts.get("settings_prompt", ""))
+            if self.settings_quick_reply_builder:
+                settings_quick = self.settings_quick_reply_builder()
+                if settings_quick:
+                    message["quickReply"] = settings_quick
+            self._reply(reply_token, [message])
+            return
+        if command["type"] == "menu_usage":
+            msg = self._text_message(self.texts.get("usage", ""))
             self._reply(reply_token, [msg])
             return
         if command["type"] == "invalid_word":

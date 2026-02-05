@@ -78,15 +78,42 @@ def build_code_challenge(code_verifier: str) -> str:
 def build_line_usage_text() -> str:
     return (
         "使い方:\n"
-        "1. 二字熟語だけ送ると、問題画像を返します。\n"
-        "2. 問題 <熟語> / 答え <熟語> で片方だけ。\n"
-        "3. フォント <key> でフォント設定。\n"
-        "例: 問題 春夏, 答え 春夏, フォント mincho\n"
-        "フォント一覧: default, mincho, monogothic, hiragino, dejavu"
+        "・問題生成: 二字熟語を送るとその熟語の共通部分を返します。\n"
+        "・問題登録: 「1.熟語」のように送ると出題用に熟語をストックします。（10問まで）\n"
+        "・問題一覧: 登録済みの問題集を表示。\n"
+        "・設定: フォント変更ができます。\n"
+        "・出題: グループチャットにボットを招待し、「@ボットへメンション + 数字」 で問題画像を出題。\n"
+        "・正誤判定: 「@出題者にメンション + 1.熟語」 で判定。"
     )
 
 
 def build_line_quick_reply() -> dict:
+    items = [
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "問題生成", "text": "問題生成"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "問題登録", "text": "問題登録"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "問題一覧", "text": "問題一覧"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "設定", "text": "設定"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "使い方", "text": "使い方"},
+        },
+    ]
+    return {"items": items}
+
+
+def build_line_settings_quick_reply() -> dict:
     items = []
     for font_key in generator.get_font_keys():
         items.append(
@@ -103,8 +130,11 @@ def build_line_quick_reply() -> dict:
 
 
 line_texts = {
-    "welcome_prefix": "友だち追加ありがとうございます。\n",
+    "welcome_prefix": "友だち追加ありがとうございます。\nまずは「問題生成」からどうぞ。\n",
     "usage": build_line_usage_text(),
+    "generate_prompt": "二字熟語を送信してください。",
+    "register_help": "問題登録: 「数字.二字熟語」(1〜10) を送信してください。",
+    "settings_prompt": "設定項目を選択してください。",
     "settings_updated": "設定を更新しました: {settings}",
     "font_set": "フォントを {font} に設定しました。",
     "save_failed": "設定の保存に失敗しました。",
@@ -125,6 +155,11 @@ line_keywords = {
     "question": "問題",
     "answer": "答え",
     "list": "問題集",
+    "menu_generate": "問題生成",
+    "menu_register": "問題登録",
+    "menu_list": "問題一覧",
+    "menu_settings": "設定",
+    "menu_usage": "使い方",
 }
 
 if line_image_storage == "gcs":
@@ -153,6 +188,7 @@ line_handler = LineHandler(
     image_store=line_image_store,
     quiz_store=line_quiz_store,
     bot_user_id=line_bot_user_id,
+    settings_quick_reply_builder=build_line_settings_quick_reply,
 )
 
 

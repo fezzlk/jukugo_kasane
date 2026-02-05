@@ -53,7 +53,7 @@ def _sign(body: bytes, secret: str) -> str:
     return base64.b64encode(mac).decode("utf-8")
 
 
-def _build_handler(store, generator, logger, quick_reply_builder):
+def _build_handler(store, generator, logger, quick_reply_builder, settings_builder=None):
     class DummyImageStore:
         def __init__(self):
             self.calls = []
@@ -66,7 +66,23 @@ def _build_handler(store, generator, logger, quick_reply_builder):
         def cleanup(self, paths):
             self.cleaned.append(list(paths))
 
+    class DummyQuizStore:
+        def __init__(self):
+            self.data = {}
+
+        def set_word(self, user_id, number, word):
+            old_word = self.get_word(user_id, number)
+            self.data.setdefault(user_id, {})[number] = word
+            return old_word
+
+        def get_word(self, user_id, number):
+            return self.data.get(user_id, {}).get(number, "")
+
+        def list_words(self, user_id):
+            return dict(self.data.get(user_id, {}))
+
     image_store = DummyImageStore()
+    quiz_store = DummyQuizStore()
     return LineHandler(
         channel_secret="secret",
         channel_access_token="token",
@@ -77,12 +93,17 @@ def _build_handler(store, generator, logger, quick_reply_builder):
         texts={
             "welcome_prefix": "WELCOME ",
             "usage": "USAGE",
+            "generate_prompt": "SEND TWO CHARS",
+            "register_help": "REGISTER FORMAT",
+            "settings_prompt": "SETTINGS PROMPT",
             "settings_updated": "UPDATED {settings}",
             "font_set": "FONT {font}",
             "save_failed": "SAVE FAILED",
             "need_word": "NEED WORD",
             "not_two_chars": "NOT TWO CHARS",
             "invalid_word": "INVALID WORD",
+            "answer_correct": "CORRECT",
+            "answer_incorrect": "INCORRECT",
             "error_prefix": "ERROR: ",
             "invalid_signature": "INVALID",
             "bad_request": "BAD",
@@ -93,10 +114,18 @@ def _build_handler(store, generator, logger, quick_reply_builder):
             "font": "font",
             "question": "question",
             "answer": "answer",
+            "list": "list",
+            "menu_generate": "menu_generate",
+            "menu_register": "menu_register",
+            "menu_list": "menu_list",
+            "menu_settings": "menu_settings",
+            "menu_usage": "menu_usage",
         },
         quick_reply_builder=quick_reply_builder,
         default_font_key="default",
         image_store=image_store,
+        quiz_store=quiz_store,
+        settings_quick_reply_builder=settings_builder,
     )
 
 
@@ -323,6 +352,172 @@ def test_help_command_returns_usage(monkeypatch):
                 "replyToken": "rt",
                 "message": {"type": "text", "text": "help"},
                 "source": {"userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "USAGE"
+
+
+def test_menu_generate_returns_prompt(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "menu_generate"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "SEND TWO CHARS"
+
+
+def test_menu_register_returns_help(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "menu_register"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "REGISTER FORMAT"
+
+
+def test_menu_list_returns_quiz_list(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    handler.quiz_store.set_word("user:u1", 2, "ab")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "menu_list"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]["text"]
+    assert "1." in message
+    assert "2. ab" in message
+
+
+def test_menu_settings_returns_settings_quick_reply(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(
+        store,
+        generator,
+        logger,
+        lambda: None,
+        settings_builder=lambda: {"items": [{"type": "action"}]},
+    )
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "menu_settings"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]
+    assert message["text"] == "SETTINGS PROMPT"
+    assert "quickReply" in message
+
+
+def test_menu_usage_returns_usage(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "menu_usage"},
+                "source": {"type": "user", "userId": "u1"},
             }
         ]
     }
