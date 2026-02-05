@@ -45,6 +45,22 @@ class LineCommandParser:
         if menu_usage and stripped == menu_usage:
             return {"type": "menu_usage"}
 
+        menu_mode = str(self.keywords.get("menu_mode", ""))
+        if menu_mode and stripped == menu_mode:
+            return {"type": "menu_mode"}
+
+        menu_font = str(self.keywords.get("menu_font", ""))
+        if menu_font and stripped == menu_font:
+            return {"type": "menu_font"}
+
+        mode_common = str(self.keywords.get("mode_common", ""))
+        if mode_common and stripped == mode_common:
+            return {"type": "mode_common"}
+
+        mode_union = str(self.keywords.get("mode_union", ""))
+        if mode_union and stripped == mode_union:
+            return {"type": "mode_union"}
+
         question_keyword = str(self.keywords.get("question", ""))
         if stripped.startswith(question_keyword):
             _, _, word = stripped.partition(" ")

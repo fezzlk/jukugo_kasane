@@ -28,6 +28,8 @@ class LineHandler:
         quiz_store: Optional[object] = None,
         bot_user_id: str = "",
         settings_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
+        mode_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
+        font_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
         parser: Optional[LineCommandParser] = None,
         reply_client: Optional[LineReplyClient] = None,
     ) -> None:
@@ -40,6 +42,8 @@ class LineHandler:
         self.keywords = keywords
         self.quick_reply_builder = quick_reply_builder
         self.settings_quick_reply_builder = settings_quick_reply_builder
+        self.mode_quick_reply_builder = mode_quick_reply_builder
+        self.font_quick_reply_builder = font_quick_reply_builder
         self.default_font_key = default_font_key
 
         if image_store is None:
@@ -129,6 +133,34 @@ class LineHandler:
                     message["quickReply"] = settings_quick
             self._reply(reply_token, [message])
             return
+        if command["type"] == "menu_mode":
+            message = self._text_message(self.texts.get("mode_prompt", ""))
+            if self.mode_quick_reply_builder:
+                mode_quick = self.mode_quick_reply_builder()
+                if mode_quick:
+                    message["quickReply"] = mode_quick
+            self._reply(reply_token, [message])
+            return
+        if command["type"] == "menu_font":
+            message = self._text_message(self.texts.get("font_prompt", ""))
+            if self.font_quick_reply_builder:
+                font_quick = self.font_quick_reply_builder()
+                if font_quick:
+                    message["quickReply"] = font_quick
+            self._reply(reply_token, [message])
+            return
+        if command["type"] == "mode_common":
+            user_settings["quiz_mode"] = "intersection"
+            self._save_user_settings(user_key, user_settings)
+            msg = self._text_message(self.texts.get("mode_set_common", ""))
+            self._reply(reply_token, [msg])
+            return
+        if command["type"] == "mode_union":
+            user_settings["quiz_mode"] = "union"
+            self._save_user_settings(user_key, user_settings)
+            msg = self._text_message(self.texts.get("mode_set_union", ""))
+            self._reply(reply_token, [msg])
+            return
         if command["type"] == "menu_usage":
             msg = self._text_message(self.texts.get("usage", ""))
             self._reply(reply_token, [msg])
@@ -165,17 +197,36 @@ class LineHandler:
                     if number:
                         sender_id = event.get("source", {}).get("userId", "")
                         sender_key = f"user:{sender_id}" if sender_id else user_key
+                        sender_settings = self._get_user_settings(sender_key)
+                        sender_font = sender_settings.get("font", font_key)
+                        quiz_mode = sender_settings.get("quiz_mode", "intersection")
                         stored_word = self.quiz_store.get_word(sender_key, number)
                         if stored_word:
                             try:
-                                q_path, a_path = self.generator.generate_images(
-                                    stored_word, font_key
-                                )
-                                q_url = self.image_store.get_image_url(
-                                    "q", stored_word, font_key, q_path
-                                )
-                                self._reply(reply_token, [self._image_message(q_url)])
-                                self.image_store.cleanup([q_path, a_path])
+                                if quiz_mode == "union":
+                                    q_path, a_path, u_path = (
+                                        self.generator.generate_images_with_union(
+                                            stored_word, sender_font
+                                        )
+                                    )
+                                    u_url = self.image_store.get_image_url(
+                                        "u", stored_word, sender_font, u_path
+                                    )
+                                    self._reply(
+                                        reply_token, [self._image_message(u_url)]
+                                    )
+                                    self.image_store.cleanup([q_path, a_path, u_path])
+                                else:
+                                    q_path, a_path = self.generator.generate_images(
+                                        stored_word, sender_font
+                                    )
+                                    q_url = self.image_store.get_image_url(
+                                        "q", stored_word, sender_font, q_path
+                                    )
+                                    self._reply(
+                                        reply_token, [self._image_message(q_url)]
+                                    )
+                                    self.image_store.cleanup([q_path, a_path])
                             except Exception as exc:
                                 self.logger.error(
                                     "LINE group quiz generate error: %s", exc
@@ -256,24 +307,42 @@ class LineHandler:
                 self._reply(reply_token, [msg])
                 return
             try:
-                q_path, a_path = self.generator.generate_images(word, font_key)
                 messages = []
                 if command["type"] == "both":
+                    q_path, a_path, u_path = self.generator.generate_images_with_union(
+                        word, font_key
+                    )
                     messages.append(
                         self._text_message(f"「{word}」の共通部分です。")
                     )
-                if command["type"] in ("question", "both"):
                     q_url = self.image_store.get_image_url(
                         "q", word, font_key, q_path
                     )
-                    messages.append(self._image_message(q_url))
-                if command["type"] in ("answer", "both"):
+                    u_url = self.image_store.get_image_url(
+                        "u", word, font_key, u_path
+                    )
                     a_url = self.image_store.get_image_url(
                         "a", word, font_key, a_path
                     )
+                    messages.append(self._image_message(q_url))
+                    messages.append(self._image_message(u_url))
                     messages.append(self._image_message(a_url))
-                self._reply(reply_token, messages)
-                self.image_store.cleanup([q_path, a_path])
+                    self._reply(reply_token, messages)
+                    self.image_store.cleanup([q_path, a_path, u_path])
+                else:
+                    q_path, a_path = self.generator.generate_images(word, font_key)
+                    if command["type"] == "question":
+                        q_url = self.image_store.get_image_url(
+                            "q", word, font_key, q_path
+                        )
+                        messages.append(self._image_message(q_url))
+                    if command["type"] == "answer":
+                        a_url = self.image_store.get_image_url(
+                            "a", word, font_key, a_path
+                        )
+                        messages.append(self._image_message(a_url))
+                    self._reply(reply_token, messages)
+                    self.image_store.cleanup([q_path, a_path])
             except Exception as exc:
                 self.logger.error("LINE image generate error: %s", exc)
                 err = f"{self.texts.get('error_prefix', '')}{exc}"

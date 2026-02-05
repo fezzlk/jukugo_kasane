@@ -114,6 +114,34 @@ def build_line_quick_reply() -> dict:
 
 
 def build_line_settings_quick_reply() -> dict:
+    items = [
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "出題モード", "text": "出題モード"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "フォント", "text": "フォント"},
+        },
+    ]
+    return {"items": items}
+
+
+def build_line_mode_quick_reply() -> dict:
+    items = [
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "共通部分", "text": "共通部分"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "和集合", "text": "和集合"},
+        },
+    ]
+    return {"items": items}
+
+
+def build_line_font_quick_reply() -> dict:
     items = []
     for font_key in generator.get_font_keys():
         items.append(
@@ -130,11 +158,15 @@ def build_line_settings_quick_reply() -> dict:
 
 
 line_texts = {
-    "welcome_prefix": "友だち追加ありがとうございます。\nまずは「問題生成」からどうぞ。\n",
+    "welcome_prefix": "友だち追加ありがとうございます。\n\n",
     "usage": build_line_usage_text(),
-    "generate_prompt": "二字熟語を送信してください。",
+    "generate_prompt": "熟語を送信してください。",
     "register_help": "問題登録: 「数字.二字熟語」(1〜10) を送信してください。",
     "settings_prompt": "設定項目を選択してください。",
+    "mode_prompt": "出題モードを選択してください。",
+    "mode_set_common": "出題モードを共通部分に設定しました。",
+    "mode_set_union": "出題モードを和集合に設定しました。",
+    "font_prompt": "フォントを選択してください。",
     "settings_updated": "設定を更新しました: {settings}",
     "font_set": "フォントを {font} に設定しました。",
     "save_failed": "設定の保存に失敗しました。",
@@ -160,6 +192,10 @@ line_keywords = {
     "menu_list": "問題一覧",
     "menu_settings": "設定",
     "menu_usage": "使い方",
+    "menu_mode": "出題モード",
+    "menu_font": "フォント",
+    "mode_common": "共通部分",
+    "mode_union": "和集合",
 }
 
 if line_image_storage == "gcs":
@@ -189,6 +225,8 @@ line_handler = LineHandler(
     quiz_store=line_quiz_store,
     bot_user_id=line_bot_user_id,
     settings_quick_reply_builder=build_line_settings_quick_reply,
+    mode_quick_reply_builder=build_line_mode_quick_reply,
+    font_quick_reply_builder=build_line_font_quick_reply,
 )
 
 
@@ -344,6 +382,21 @@ def get_a(word):
                 f'画像生成が未実行です。<a href="{generate_url}">生成する</a>',
                 404,
             )
+        return send_from_directory(generator.images_dir, filename)
+    except ValueError as e:
+        return str(e), 400
+
+
+@app.route("/u/<word>")
+def get_u(word):
+    """和集合画像を返す"""
+    try:
+        font_key = generator.normalize_font_key(request.args.get("font"))
+        suffix = "" if font_key == "default" else f"_{font_key}"
+        filename = f"U_{word}{suffix}.png"
+        file_path = os.path.join(generator.images_dir, filename)
+        if not os.path.exists(file_path):
+            generator.generate_images_with_union(word, font_key)
         return send_from_directory(generator.images_dir, filename)
     except ValueError as e:
         return str(e), 400

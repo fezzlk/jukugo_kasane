@@ -131,6 +131,22 @@ class ImageGenerator:
 
         return q_image, a_image
 
+    def _process_union_pixels(self, kanji1: Image.Image, kanji2: Image.Image) -> Image.Image:
+        """ピクセル処理で和集合画像を生成"""
+        p1 = kanji1.load()
+        p2 = kanji2.load()
+
+        u_image = Image.new("RGB", (1024, 1024))
+        u_pix = u_image.load()
+
+        for x, y in product(*map(range, (1024, 1024))):
+            if p1[x, y] == BLACK or p2[x, y] == BLACK:
+                u_pix[x, y] = BLACK
+            else:
+                u_pix[x, y] = WHITE
+
+        return u_image
+
     def generate_images(self, word: str, font_key: str = "default") -> tuple:
         """画像を生成して保存"""
         if len(word) != 2:
@@ -164,6 +180,38 @@ class ImageGenerator:
         logger.info(f"画像保存完了: {q_filename}, {a_filename}")
 
         return q_path, a_path
+
+    def generate_images_with_union(self, word: str, font_key: str = "default") -> tuple:
+        """問題画像・解答画像・和集合画像を生成して保存"""
+        if len(word) != 2:
+            raise ValueError("お題は二文字にしてください。")
+
+        normalized_font_key = self.normalize_font_key(font_key)
+        logger.info(f"画像生成開始(和集合): {word}, font_key: {normalized_font_key}")
+
+        font = self._get_font_for_key(normalized_font_key)
+        kanji1 = self._create_kanji_image(word[0], font)
+        kanji2 = self._create_kanji_image(word[1], font)
+
+        q_image, a_image = self._process_pixels(kanji1, kanji2)
+        u_image = self._process_union_pixels(kanji1, kanji2)
+
+        suffix = "" if normalized_font_key == "default" else f"_{normalized_font_key}"
+        q_filename = f"Q_{word}{suffix}.png"
+        a_filename = f"A_{word}{suffix}.png"
+        u_filename = f"U_{word}{suffix}.png"
+
+        q_path = os.path.join(self.images_dir, q_filename)
+        a_path = os.path.join(self.images_dir, a_filename)
+        u_path = os.path.join(self.images_dir, u_filename)
+
+        q_image.save(q_path)
+        a_image.save(a_path)
+        u_image.save(u_path)
+
+        logger.info(f"画像保存完了: {q_filename}, {a_filename}, {u_filename}")
+
+        return q_path, a_path, u_path
 
 
 # Flask アプリケーションのルート定義
