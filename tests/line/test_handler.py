@@ -130,6 +130,10 @@ def _build_handler(
         def list_words(self, user_id):
             return dict(self.data.get(user_id, {}))
 
+    class DummyProfileClient:
+        def get_display_name(self, source, user_id):
+            return "Tester"
+
     image_store = DummyImageStore()
     quiz_store = DummyQuizStore()
     return LineHandler(
@@ -186,6 +190,7 @@ def _build_handler(
         mode_quick_reply_builder=mode_builder,
         font_quick_reply_builder=font_builder,
         bot_user_id=bot_user_id,
+        profile_client=DummyProfileClient(),
     )
 
 
@@ -1102,5 +1107,6 @@ def test_group_answer_correct(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     message = captured["json"]["messages"][0]
+    assert message["text"].startswith("@Tester")
     assert message["text"].endswith("CORRECT")
     assert message["mention"]["mentionees"][0]["userId"] == "u1"

@@ -23,6 +23,7 @@ import token_store
 from line import store as line_store
 from line.handler import LineHandler
 from line.image_store import GcsImageStore, LocalImageStore
+from line.profile import LineProfileClient
 from line.quiz_store import FirestoreQuizStore, SqliteQuizStore
 
 app = Flask(__name__)
@@ -240,6 +241,7 @@ line_handler = LineHandler(
     settings_quick_reply_builder=build_line_settings_quick_reply,
     mode_quick_reply_builder=build_line_mode_quick_reply,
     font_quick_reply_builder=build_line_font_quick_reply,
+    profile_client=LineProfileClient(line_channel_access_token, logger),
 )
 
 

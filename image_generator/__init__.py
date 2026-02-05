@@ -195,27 +195,41 @@ class ImageGenerator:
 
     def _process_step_pixels(self, kanji_images: list, step_index: int) -> Image.Image:
         """ピクセル処理で段階画像を生成"""
-        group1 = kanji_images[:step_index]
-        group2 = kanji_images[step_index]
-        group1_pixels = [img.load() for img in group1]
-        group2_pixels = group2.load()
-
         frame = Image.new("RGB", (1024, 1024))
         frame_pix = frame.load()
+        pixels = [img.load() for img in kanji_images]
 
+        if step_index == 1:
+            p1 = pixels[0]
+            p2 = pixels[1]
+            for x, y in product(*map(range, (1024, 1024))):
+                p1_black = p1[x, y] == BLACK
+                p2_black = p2[x, y] == BLACK
+                if p1_black and p2_black:
+                    frame_pix[x, y] = PURPLE
+                elif p1_black and not p2_black:
+                    frame_pix[x, y] = RED
+                elif not p1_black and p2_black:
+                    frame_pix[x, y] = BLUE
+                else:
+                    frame_pix[x, y] = WHITE
+            return frame
+
+        prefix_end = step_index
+        next_index = step_index
         for x, y in product(*map(range, (1024, 1024))):
-            group1_black = False
-            for p in group1_pixels:
-                if p[x, y] == BLACK:
-                    group1_black = True
+            prefix_all_black = True
+            for idx in range(prefix_end):
+                if pixels[idx][x, y] != BLACK:
+                    prefix_all_black = False
                     break
-            group2_black = group2_pixels[x, y] == BLACK
+            next_black = pixels[next_index][x, y] == BLACK
 
-            if group1_black and group2_black:
-                frame_pix[x, y] = PURPLE
-            elif group1_black and not group2_black:
+            if prefix_all_black and not next_black:
                 frame_pix[x, y] = RED
-            elif not group1_black and group2_black:
+            elif prefix_all_black and next_black:
+                frame_pix[x, y] = PURPLE
+            elif next_black:
                 frame_pix[x, y] = BLUE
             else:
                 frame_pix[x, y] = WHITE

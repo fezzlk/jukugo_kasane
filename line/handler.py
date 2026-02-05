@@ -3,6 +3,7 @@ import re
 
 from line.image_store import BaseImageStore
 from line.parser import LineCommandParser
+from line.profile import LineProfileClient
 from line.reply import LineReplyClient
 from line.signature import verify_signature
 from typing import Callable, Dict, Optional
@@ -30,6 +31,7 @@ class LineHandler:
         settings_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
         mode_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
         font_quick_reply_builder: Optional[Callable[[], Optional[dict]]] = None,
+        profile_client: Optional[LineProfileClient] = None,
         parser: Optional[LineCommandParser] = None,
         reply_client: Optional[LineReplyClient] = None,
     ) -> None:
@@ -55,6 +57,9 @@ class LineHandler:
         self.bot_user_id = bot_user_id
         self.parser = parser or LineCommandParser(keywords)
         self.reply_client = reply_client or LineReplyClient(
+            channel_access_token, logger
+        )
+        self.profile_client = profile_client or LineProfileClient(
             channel_access_token, logger
         )
 
@@ -105,171 +110,22 @@ class LineHandler:
         font_key = user_settings.get("font", self.default_font_key)
 
         text = message.get("text", "")
-        command = self.parser.parse(text)
         if source_type in ("group", "room"):
-            command = {"type": "unknown"}
+            self._handle_group_message(event, message, user_key, font_key, text, reply_token)
+            return
+
+        command = self.parser.parse(text)
         if text.startswith("font_"):
             value = text[len("font_") :].strip()
             if value:
                 command = {"type": "font", "value": value}
-        if command["type"] == "help":
-            msg = self._text_message(self.texts.get("usage", ""), True)
-            self._reply(reply_token, [msg])
+        if self._handle_menu_commands(command, user_key, source_type, reply_token):
             return
-        if command["type"] == "menu_generate":
-            msg = self._text_message(self.texts.get("generate_prompt", ""))
-            self._reply(reply_token, [msg])
+        if self._handle_user_quiz_registration(text, user_key, reply_token):
             return
-        if command["type"] == "menu_register":
-            msg = self._text_message(self.texts.get("register_help", ""))
-            self._reply(reply_token, [msg])
+        if command["type"] == "both":
+            self._handle_user_quiz_images(command, font_key, reply_token)
             return
-        if command["type"] == "menu_list":
-            if source_type == "user":
-                msg = self._text_message(self._build_quiz_list_text(user_key))
-                self._reply(reply_token, [msg])
-            return
-        if command["type"] == "menu_settings":
-            message = self._text_message(self.texts.get("settings_prompt", ""))
-            if self.settings_quick_reply_builder:
-                settings_quick = self.settings_quick_reply_builder()
-                if settings_quick:
-                    message["quickReply"] = settings_quick
-            self._reply(reply_token, [message])
-            return
-        if command["type"] == "menu_mode":
-            message = self._text_message(self.texts.get("mode_prompt", ""))
-            if self.mode_quick_reply_builder:
-                mode_quick = self.mode_quick_reply_builder()
-                if mode_quick:
-                    message["quickReply"] = mode_quick
-            self._reply(reply_token, [message])
-            return
-        if command["type"] == "menu_font":
-            message = self._text_message(self.texts.get("font_prompt", ""))
-            if self.font_quick_reply_builder:
-                font_quick = self.font_quick_reply_builder()
-                if font_quick:
-                    message["quickReply"] = font_quick
-            self._reply(reply_token, [message])
-            return
-        if command["type"] == "mode_common":
-            user_settings["quiz_mode"] = "intersection"
-            self._save_user_settings(user_key, user_settings)
-            msg = self._text_message(self.texts.get("mode_set_common", ""))
-            self._reply(reply_token, [msg])
-            return
-        if command["type"] == "mode_union":
-            user_settings["quiz_mode"] = "union"
-            self._save_user_settings(user_key, user_settings)
-            msg = self._text_message(self.texts.get("mode_set_union", ""))
-            self._reply(reply_token, [msg])
-            return
-        if command["type"] == "menu_usage":
-            msg = self._text_message(self.texts.get("usage", ""))
-            self._reply(reply_token, [msg])
-            return
-        if command["type"] == "invalid_word":
-            msg = self._text_message(self.texts.get("invalid_word", ""))
-            self._reply(reply_token, [msg])
-            return
-        if command["type"] == "list":
-            if source_type == "user":
-                msg = self._text_message(self._build_quiz_list_text(user_key))
-                self._reply(reply_token, [msg])
-            return
-
-        if source_type == "user":
-            quiz_status = self._parse_quiz_message(text)
-            if quiz_status:
-                status, number, word = quiz_status
-                if status == "invalid_number":
-                    msg = self._text_message(self.texts.get("invalid_number", ""))
-                    self._reply(reply_token, [msg])
-                    return
-                if status == "invalid_length":
-                    msg = self._text_message(self.texts.get("not_two_chars", ""))
-                    self._reply(reply_token, [msg])
-                    return
-                if status == "invalid_word":
-                    msg = self._text_message(self.texts.get("invalid_word", ""))
-                    self._reply(reply_token, [msg])
-                    return
-                if status == "ok":
-                    old_word = self.quiz_store.set_word(user_key, number, word)
-                    msg = self._text_message(
-                        self._build_set_reply_text(number, word, old_word)
-                    )
-                    self._reply(reply_token, [msg])
-                    return
-
-        if source_type in ("group", "room"):
-            if not self._is_group_quiz_enabled():
-                return
-            mentionees = message.get("mention", {}).get("mentionees", [])
-            sender_id = event.get("source", {}).get("userId", "")
-            sender_key = f"user:{sender_id}" if sender_id else user_key
-            tokens = text.split()
-            last_token = tokens[-1] if tokens else ""
-
-            if self._is_bot_mentioned(message):
-                number = int(last_token) if last_token.isdigit() else 0
-                if number < 1 or number > 10:
-                    msg = self._text_message(self.texts.get("invalid_number", ""))
-                    self._reply(reply_token, [msg])
-                    return
-                stored_word = self.quiz_store.get_word(sender_key, number)
-                if not stored_word:
-                    msg = self._text_message(f"{number}問目は未登録です。")
-                    self._reply(reply_token, [msg])
-                    return
-                sender_settings = self._get_user_settings(sender_key)
-                sender_font = sender_settings.get("font", font_key)
-                quiz_mode = sender_settings.get("quiz_mode", "intersection")
-                try:
-                    if quiz_mode == "union":
-                        q_path, a_path, u_path = (
-                            self.generator.generate_images_with_union(
-                                stored_word, sender_font
-                            )
-                        )
-                        u_url = self.image_store.get_image_url(
-                            "u", stored_word, sender_font, u_path
-                        )
-                        self._reply(reply_token, [self._image_message(u_url)])
-                        self.image_store.cleanup([q_path, a_path, u_path])
-                    else:
-                        q_path, a_path = self.generator.generate_images(
-                            stored_word, sender_font
-                        )
-                        q_url = self.image_store.get_image_url(
-                            "q", stored_word, sender_font, q_path
-                        )
-                        self._reply(reply_token, [self._image_message(q_url)])
-                        self.image_store.cleanup([q_path, a_path])
-                except Exception as exc:
-                    self.logger.error("LINE group quiz generate error: %s", exc)
-                return
-
-            if len(mentionees) == 1:
-                target_id = mentionees[0].get("userId", "")
-                if target_id and target_id != self.bot_user_id:
-                    quiz_status = self._parse_quiz_message(last_token)
-                    if not quiz_status or quiz_status[0] != "ok":
-                        msg = self._text_message(
-                            "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)"
-                        )
-                        self._reply(reply_token, [msg])
-                        return
-                    _, number, word = quiz_status
-                    stored_word = self.quiz_store.get_word(f"user:{target_id}", number)
-                    if stored_word and stored_word == word:
-                        result = self.texts.get("answer_correct", "正解")
-                    else:
-                        result = self.texts.get("answer_incorrect", "不正解")
-                    mention = self._build_mention_message(sender_id, result)
-                    self._reply(reply_token, [mention])
-                return
 
         if command["type"] == "setting":
             setting = command["setting"]
@@ -380,6 +236,267 @@ class LineHandler:
         msg = self._text_message(self.texts.get("not_two_chars", ""))
         self._reply(reply_token, [msg])
 
+    def _handle_menu_commands(
+        self, command: dict, user_key: str, source_type: str, reply_token: str
+    ) -> bool:
+        if command["type"] == "help":
+            msg = self._text_message(self.texts.get("usage", ""), True)
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "menu_generate":
+            msg = self._text_message(self.texts.get("generate_prompt", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "menu_register":
+            msg = self._text_message(self.texts.get("register_help", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "menu_list":
+            if source_type == "user":
+                msg = self._text_message(self._build_quiz_list_text(user_key))
+                self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "menu_settings":
+            message = self._text_message(self.texts.get("settings_prompt", ""))
+            if self.settings_quick_reply_builder:
+                settings_quick = self.settings_quick_reply_builder()
+                if settings_quick:
+                    message["quickReply"] = settings_quick
+            self._reply(reply_token, [message])
+            return True
+        if command["type"] == "menu_mode":
+            message = self._text_message(self.texts.get("mode_prompt", ""))
+            if self.mode_quick_reply_builder:
+                mode_quick = self.mode_quick_reply_builder()
+                if mode_quick:
+                    message["quickReply"] = mode_quick
+            self._reply(reply_token, [message])
+            return True
+        if command["type"] == "menu_font":
+            message = self._text_message(self.texts.get("font_prompt", ""))
+            if self.font_quick_reply_builder:
+                font_quick = self.font_quick_reply_builder()
+                if font_quick:
+                    message["quickReply"] = font_quick
+            self._reply(reply_token, [message])
+            return True
+        if command["type"] == "mode_common":
+            user_settings = self._get_user_settings(user_key)
+            user_settings["quiz_mode"] = "intersection"
+            self._save_user_settings(user_key, user_settings)
+            msg = self._text_message(self.texts.get("mode_set_common", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "mode_union":
+            user_settings = self._get_user_settings(user_key)
+            user_settings["quiz_mode"] = "union"
+            self._save_user_settings(user_key, user_settings)
+            msg = self._text_message(self.texts.get("mode_set_union", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "menu_usage":
+            msg = self._text_message(self.texts.get("usage", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "invalid_word":
+            msg = self._text_message(self.texts.get("invalid_word", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "list":
+            if source_type == "user":
+                msg = self._text_message(self._build_quiz_list_text(user_key))
+                self._reply(reply_token, [msg])
+            return True
+        if command["type"] == "font":
+            return self._handle_font_command(command, user_key, reply_token)
+        return False
+
+    def _handle_font_command(self, command: dict, user_key: str, reply_token: str) -> bool:
+        try:
+            font_key = self._normalize_font_key(command["value"])
+        except ValueError as exc:
+            self._reply(reply_token, [self._text_message(str(exc))])
+            return True
+        user_settings = self._get_user_settings(user_key)
+        user_settings["font"] = font_key
+        if not self._save_user_settings(user_key, user_settings):
+            self._reply(
+                reply_token,
+                [self._text_message(self.texts.get("save_failed", ""))],
+            )
+            return True
+        msg = self._text_message(
+            self.texts.get("font_set", "").format(font=font_key),
+            include_quick_reply=True,
+        )
+        self._reply(reply_token, [msg])
+        return True
+
+    def _handle_user_quiz_registration(
+        self, text: str, user_key: str, reply_token: str
+    ) -> bool:
+        quiz_status = self._parse_quiz_message(text)
+        if not quiz_status:
+            return False
+        status, number, word = quiz_status
+        if status == "invalid_number":
+            msg = self._text_message(self.texts.get("invalid_number", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if status == "invalid_length":
+            msg = self._text_message(self.texts.get("not_two_chars", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if status == "invalid_word":
+            msg = self._text_message(self.texts.get("invalid_word", ""))
+            self._reply(reply_token, [msg])
+            return True
+        if status == "ok":
+            old_word = self.quiz_store.set_word(user_key, number, word)
+            msg = self._text_message(
+                self._build_set_reply_text(number, word, old_word)
+            )
+            self._reply(reply_token, [msg])
+            return True
+        return False
+
+    def _handle_user_quiz_images(
+        self, command: dict, font_key: str, reply_token: str
+    ) -> None:
+        word = command.get("word", "")
+        if not word:
+            self._reply(reply_token, [self._text_message(self.texts.get("need_word", ""))])
+            return
+        if len(word) >= 2 and not self.parser._is_allowed_word(word):
+            msg = self._text_message(self.texts.get("invalid_word", ""))
+            self._reply(reply_token, [msg])
+            return
+        try:
+            messages = []
+            messages.append(self._text_message(f"「{word}」の合成結果です。"))
+            if len(word) >= 3:
+                q_path, a_path, u_path = self.generator.generate_images_with_union(
+                    word, font_key
+                )
+                q_url = self.image_store.get_image_url("q", word, font_key, q_path)
+                u_url = self.image_store.get_image_url("u", word, font_key, u_path)
+                messages.append(self._image_message(q_url))
+                messages.append(self._image_message(u_url))
+
+                video_path, preview_path = self.generator.generate_union_video(
+                    word, font_key, fps=1
+                )
+                video_url = self.image_store.get_video_url(
+                    "v", word, font_key, video_path
+                )
+                preview_url = self.image_store.get_image_url(
+                    "p", word, font_key, preview_path
+                )
+                messages.append(
+                    {
+                        "type": "video",
+                        "originalContentUrl": video_url,
+                        "previewImageUrl": preview_url,
+                    }
+                )
+                self._reply(reply_token, messages)
+                self.image_store.cleanup(
+                    [q_path, a_path, u_path, video_path, preview_path]
+                )
+            else:
+                q_path, a_path, u_path = self.generator.generate_images_with_union(
+                    word, font_key
+                )
+                q_url = self.image_store.get_image_url("q", word, font_key, q_path)
+                u_url = self.image_store.get_image_url("u", word, font_key, u_path)
+                messages.append(self._image_message(q_url))
+                messages.append(self._image_message(u_url))
+                if a_path:
+                    a_url = self.image_store.get_image_url("a", word, font_key, a_path)
+                    messages.append(self._image_message(a_url))
+                self._reply(reply_token, messages)
+                self.image_store.cleanup([q_path, a_path, u_path])
+        except Exception as exc:
+            self.logger.error("LINE image generate error: %s", exc)
+            err = f"{self.texts.get('error_prefix', '')}{exc}"
+            self._reply(reply_token, [self._text_message(err)])
+
+    def _handle_group_message(
+        self,
+        event: dict,
+        message: dict,
+        user_key: str,
+        font_key: str,
+        text: str,
+        reply_token: str,
+    ) -> None:
+        mentionees = message.get("mention", {}).get("mentionees", [])
+        if not mentionees:
+            return
+        sender_id = event.get("source", {}).get("userId", "")
+        sender_key = f"user:{sender_id}" if sender_id else user_key
+        tokens = text.split()
+        last_token = tokens[-1] if tokens else ""
+
+        if self._is_bot_mentioned(message):
+            number = int(last_token) if last_token.isdigit() else 0
+            if number < 1 or number > 10:
+                msg = self._text_message(self.texts.get("invalid_number", ""))
+                self._reply(reply_token, [msg])
+                return
+            stored_word = self.quiz_store.get_word(sender_key, number)
+            if not stored_word:
+                msg = self._text_message(f"{number}問目は未登録です。")
+                self._reply(reply_token, [msg])
+                return
+            sender_settings = self._get_user_settings(sender_key)
+            sender_font = sender_settings.get("font", font_key)
+            quiz_mode = sender_settings.get("quiz_mode", "intersection")
+            try:
+                if quiz_mode == "union":
+                    q_path, a_path, u_path = self.generator.generate_images_with_union(
+                        stored_word, sender_font
+                    )
+                    u_url = self.image_store.get_image_url(
+                        "u", stored_word, sender_font, u_path
+                    )
+                    self._reply(reply_token, [self._image_message(u_url)])
+                    self.image_store.cleanup([q_path, a_path, u_path])
+                else:
+                    q_path, a_path = self.generator.generate_images(
+                        stored_word, sender_font
+                    )
+                    q_url = self.image_store.get_image_url(
+                        "q", stored_word, sender_font, q_path
+                    )
+                    self._reply(reply_token, [self._image_message(q_url)])
+                    self.image_store.cleanup([q_path, a_path])
+            except Exception as exc:
+                self.logger.error("LINE group quiz generate error: %s", exc)
+            return
+
+        if len(mentionees) == 1:
+            target_id = mentionees[0].get("userId", "")
+            if target_id and target_id != self.bot_user_id:
+                quiz_status = self._parse_quiz_message(last_token)
+                if not quiz_status or quiz_status[0] != "ok":
+                    msg = self._text_message(
+                        "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)"
+                    )
+                    self._reply(reply_token, [msg])
+                    return
+                _, number, word = quiz_status
+                stored_word = self.quiz_store.get_word(f"user:{target_id}", number)
+                if stored_word and stored_word == word:
+                    result = self.texts.get("answer_correct", "正解")
+                else:
+                    result = self.texts.get("answer_incorrect", "不正解")
+                display_name = self.profile_client.get_display_name(
+                    event.get("source", {}), sender_id
+                )
+                mention = self._build_mention_message(sender_id, result, display_name)
+                self._reply(reply_token, [mention])
+
     def _text_message(self, text: str, include_quick_reply: bool = False) -> dict:
         """Build a text message payload."""
         message = {"type": "text", "text": text}
@@ -450,9 +567,6 @@ class LineHandler:
             lines.append(f"{number}. {word}")
         return "\n".join(lines)
 
-    def _is_group_quiz_enabled(self) -> bool:
-        return bool(self.bot_user_id)
-
     def _is_bot_mentioned(self, message: dict) -> bool:
         mentionees = message.get("mention", {}).get("mentionees", []) if message else []
         for mentionee in mentionees:
@@ -460,35 +574,11 @@ class LineHandler:
                 return True
         return False
 
-    def _extract_quiz_number(self, text: str) -> int:
-        match = re.search(r"\b(10|[1-9])\b", text)
-        if match:
-            return int(match.group(1))
-        return 0
-
-    def _parse_answer_submission(self, event: dict) -> Optional[tuple]:
-        message = event.get("message", {})
-        text = message.get("text", "")
-        mentionees = message.get("mention", {}).get("mentionees", [])
-        target = None
-        sender_user_id = event.get("source", {}).get("userId", "")
-        for mentionee in mentionees:
-            user_id = mentionee.get("userId")
-            if user_id and user_id != self.bot_user_id:
-                target = user_id
-                break
-        if not target:
-            return None
-        match = self._match_quiz_pattern(text)
-        if not match:
-            return None
-        number, word = match
-        if not self.parser._is_allowed_word(word):
-            return ("invalid", sender_user_id)
-        return target, sender_user_id, number, word
-
-    def _build_mention_message(self, user_id: str, result: str) -> dict:
-        text = f"@user {result}"
+    def _build_mention_message(
+        self, user_id: str, result: str, display_name: str = ""
+    ) -> dict:
+        name = display_name or "user"
+        text = f"@{name} {result}"
         if not user_id:
             return {"type": "text", "text": result}
         return {
@@ -496,15 +586,7 @@ class LineHandler:
             "text": text,
             "mention": {
                 "mentionees": [
-                    {"index": 0, "length": 5, "userId": user_id},
+                    {"index": 0, "length": len(name) + 1, "userId": user_id},
                 ]
             },
         }
-
-    def _match_quiz_pattern(self, text: str) -> Optional[tuple]:
-        match = re.search(r"(10|[1-9])\.(.{2,8})", text)
-        if not match:
-            return None
-        number = int(match.group(1))
-        word = match.group(2).strip()
-        return number, word
