@@ -184,8 +184,9 @@ line_texts = {
     "font_set": "フォントを {font} に設定しました。",
     "save_failed": "設定の保存に失敗しました。",
     "need_word": "熟語を指定してください。",
-    "not_two_chars": "2〜8文字のメッセージを合成します。",
+    "not_two_chars": "2〜8文字で送ってください。",
     "invalid_word": "使用できない文字が含まれています。",
+    "invalid_number": "問題番号は1〜10にしてください。",
     "answer_correct": "正解",
     "answer_incorrect": "不正解",
     "error_prefix": "エラー: ",
@@ -197,8 +198,6 @@ line_keywords = {
     "help": ["使い方", "ヘルプ", "help"],
     "setting": "設定",
     "font": "フォント",
-    "question": "問題",
-    "answer": "答え",
     "list": "問題集",
     "menu_generate": "問題生成",
     "menu_register": "問題登録",
@@ -209,6 +208,7 @@ line_keywords = {
     "menu_font": "フォント",
     "mode_common": "共通部分",
     "mode_union": "和集合",
+    "font_prefix": "font_",
 }
 
 if line_image_storage == "gcs":

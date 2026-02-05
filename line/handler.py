@@ -87,9 +87,7 @@ class LineHandler:
             return
 
         if event_type == "follow":
-            welcome = self.texts.get("welcome_prefix", "") + self.texts.get(
-                "usage", ""
-            )
+            welcome = self.texts.get("welcome_prefix", "") + self.texts.get("usage", "")
             message = self._text_message(welcome, include_quick_reply=True)
             self._reply(reply_token, [message])
             return
@@ -108,6 +106,10 @@ class LineHandler:
 
         text = message.get("text", "")
         command = self.parser.parse(text)
+        if text.startswith("font_") and command.get("type") == "unknown":
+            value = text[len("font_") :].strip()
+            if value:
+                command = {"type": "font", "value": value}
         if command["type"] == "help":
             msg = self._text_message(self.texts.get("usage", ""), True)
             self._reply(reply_token, [msg])
@@ -176,23 +178,28 @@ class LineHandler:
             return
 
         if source_type == "user":
-            set_payload = self._parse_quiz_set(text)
-            if set_payload:
-                number, word = set_payload
-                if number == -1:
+            quiz_status = self._parse_quiz_message(text)
+            if quiz_status:
+                status, number, word = quiz_status
+                if status == "invalid_number":
+                    msg = self._text_message(self.texts.get("invalid_number", ""))
+                    self._reply(reply_token, [msg])
+                    return
+                if status == "invalid_length":
+                    msg = self._text_message(self.texts.get("not_two_chars", ""))
+                    self._reply(reply_token, [msg])
+                    return
+                if status == "invalid_word":
                     msg = self._text_message(self.texts.get("invalid_word", ""))
                     self._reply(reply_token, [msg])
                     return
-                old_word = self.quiz_store.set_word(user_key, number, word)
-                msg = self._text_message(
-                    self._build_set_reply_text(number, word, old_word)
-                )
-                self._reply(reply_token, [msg])
-                return
-            if self._has_quiz_pattern(text) and not set_payload:
-                msg = self._text_message(self.texts.get("invalid_word", ""))
-                self._reply(reply_token, [msg])
-                return
+                if status == "ok":
+                    old_word = self.quiz_store.set_word(user_key, number, word)
+                    msg = self._text_message(
+                        self._build_set_reply_text(number, word, old_word)
+                    )
+                    self._reply(reply_token, [msg])
+                    return
 
         if source_type in ("group", "room"):
             if self._is_group_quiz_enabled():
@@ -246,9 +253,7 @@ class LineHandler:
                     self._reply(reply_token, [mention])
                     return
                 target_user_id, sender_user_id, number, word = answer_payload
-                stored_word = self.quiz_store.get_word(
-                    f"user:{target_user_id}", number
-                )
+                stored_word = self.quiz_store.get_word(f"user:{target_user_id}", number)
                 if stored_word and stored_word == word:
                     result = self.texts.get("answer_correct", "正解")
                 else:
@@ -299,7 +304,7 @@ class LineHandler:
             self._reply(reply_token, [msg])
             return
 
-        if command["type"] in ("question", "answer", "both"):
+        if command["type"] == "both":
             word = command.get("word", "")
             if not word:
                 self._reply(
@@ -312,76 +317,51 @@ class LineHandler:
                 return
             try:
                 messages = []
-                if command["type"] == "both":
-                    messages.append(
-                        self._text_message(f"「{word}」の共通部分です。")
+                messages.append(self._text_message(f"「{word}」の合成結果です。"))
+                if len(word) >= 3:
+                    q_path, a_path, u_path = self.generator.generate_images_with_union(
+                        word, font_key
                     )
-                    if len(word) >= 3:
-                        q_path, a_path, u_path = (
-                            self.generator.generate_images_with_union(word, font_key)
-                        )
-                        q_url = self.image_store.get_image_url(
-                            "q", word, font_key, q_path
-                        )
-                        u_url = self.image_store.get_image_url(
-                            "u", word, font_key, u_path
-                        )
-                        messages.append(self._image_message(q_url))
-                        messages.append(self._image_message(u_url))
+                    q_url = self.image_store.get_image_url("q", word, font_key, q_path)
+                    u_url = self.image_store.get_image_url("u", word, font_key, u_path)
+                    messages.append(self._image_message(q_url))
+                    messages.append(self._image_message(u_url))
 
-                        video_path, preview_path = self.generator.generate_union_video(
-                            word, font_key, fps=1
-                        )
-                        video_url = self.image_store.get_video_url(
-                            "v", word, font_key, video_path
-                        )
-                        preview_url = self.image_store.get_image_url(
-                            "p", word, font_key, preview_path
-                        )
-                        messages.append(
-                            {
-                                "type": "video",
-                                "originalContentUrl": video_url,
-                                "previewImageUrl": preview_url,
-                            }
-                        )
-                        self._reply(reply_token, messages)
-                        self.image_store.cleanup(
-                            [q_path, a_path, u_path, video_path, preview_path]
-                        )
-                    else:
-                        q_path, a_path, u_path = (
-                            self.generator.generate_images_with_union(word, font_key)
-                        )
-                        q_url = self.image_store.get_image_url(
-                            "q", word, font_key, q_path
-                        )
-                        u_url = self.image_store.get_image_url(
-                            "u", word, font_key, u_path
-                        )
-                        messages.append(self._image_message(q_url))
-                        messages.append(self._image_message(u_url))
-                        if a_path:
-                            a_url = self.image_store.get_image_url(
-                                "a", word, font_key, a_path
-                            )
-                            messages.append(self._image_message(a_url))
-                        self._reply(reply_token, messages)
-                        self.image_store.cleanup([q_path, a_path, u_path])
+                    video_path, preview_path = self.generator.generate_union_video(
+                        word, font_key, fps=1
+                    )
+                    video_url = self.image_store.get_video_url(
+                        "v", word, font_key, video_path
+                    )
+                    preview_url = self.image_store.get_image_url(
+                        "p", word, font_key, preview_path
+                    )
+                    messages.append(
+                        {
+                            "type": "video",
+                            "originalContentUrl": video_url,
+                            "previewImageUrl": preview_url,
+                        }
+                    )
+                    self._reply(reply_token, messages)
+                    self.image_store.cleanup(
+                        [q_path, a_path, u_path, video_path, preview_path]
+                    )
                 else:
-                    q_path, a_path = self.generator.generate_images(word, font_key)
-                    if command["type"] == "question":
-                        q_url = self.image_store.get_image_url(
-                            "q", word, font_key, q_path
-                        )
-                        messages.append(self._image_message(q_url))
-                    if command["type"] == "answer":
+                    q_path, a_path, u_path = self.generator.generate_images_with_union(
+                        word, font_key
+                    )
+                    q_url = self.image_store.get_image_url("q", word, font_key, q_path)
+                    u_url = self.image_store.get_image_url("u", word, font_key, u_path)
+                    messages.append(self._image_message(q_url))
+                    messages.append(self._image_message(u_url))
+                    if a_path:
                         a_url = self.image_store.get_image_url(
                             "a", word, font_key, a_path
                         )
                         messages.append(self._image_message(a_url))
                     self._reply(reply_token, messages)
-                    self.image_store.cleanup([q_path, a_path])
+                    self.image_store.cleanup([q_path, a_path, u_path])
             except Exception as exc:
                 self.logger.error("LINE image generate error: %s", exc)
                 err = f"{self.texts.get('error_prefix', '')}{exc}"
@@ -430,14 +410,23 @@ class LineHandler:
         """Normalize and validate a font key string."""
         return self.generator.normalize_font_key(text.strip().lower())
 
-    def _parse_quiz_set(self, text: str) -> Optional[tuple]:
-        match = self._match_quiz_pattern(text)
-        if not match:
+    def _parse_quiz_message(self, text: str) -> Optional[tuple]:
+        payload = text.strip()
+        if "." not in payload:
             return None
-        number, word = match
+        number_text, word = payload.split(".", 1)
+        number_text = number_text.strip()
+        word = word.strip()
+        if not number_text.isdigit():
+            return ("invalid_number", None, None)
+        number = int(number_text)
+        if number < 1 or number > 10:
+            return ("invalid_number", None, None)
+        if len(word) < 2 or len(word) > 8:
+            return ("invalid_length", number, word)
         if not self.parser._is_allowed_word(word):
-            return (-1, word)
-        return number, word
+            return ("invalid_word", number, word)
+        return ("ok", number, word)
 
     def _build_set_reply_text(self, number: int, word: str, old_word: str) -> str:
         if old_word:
@@ -456,11 +445,7 @@ class LineHandler:
         return bool(self.bot_user_id)
 
     def _is_bot_mentioned(self, message: dict) -> bool:
-        mentionees = (
-            message.get("mention", {}).get("mentionees", [])
-            if message
-            else []
-        )
+        mentionees = message.get("mention", {}).get("mentionees", []) if message else []
         for mentionee in mentionees:
             if mentionee.get("userId") == self.bot_user_id:
                 return True
@@ -514,6 +499,3 @@ class LineHandler:
         number = int(match.group(1))
         word = match.group(2).strip()
         return number, word
-
-    def _has_quiz_pattern(self, text: str) -> bool:
-        return bool(re.search(r"(10|[1-9])\.", text))

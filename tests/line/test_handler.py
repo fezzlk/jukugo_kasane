@@ -5,6 +5,26 @@ import json
 
 from line.handler import LineHandler
 
+# Test input/behavior overview:
+# - "ab" -> text + Q image + U image + A image (2-char flow)
+# - "abc" -> text + Q image + U image + video (3+ char flow)
+# - "font_mincho" -> updates font setting
+# - "help" -> usage text
+# - "menu_generate" -> generate prompt
+# - "menu_register" -> register format help
+# - "menu_list" -> quiz list output
+# - "menu_settings" -> settings quick reply
+# - "menu_mode" -> mode quick reply
+# - "mode_union" -> quiz_mode=union
+# - "menu_font" -> font quick reply
+# - "menu_usage" -> usage text
+# - "abc" (len!=2..8) -> NOT TWO CHARS
+# - "a!" -> INVALID WORD
+# - "1.音楽性" -> register quiz item
+# - "11.国語" -> INVALID NUMBER
+# - "1.3.てすと" -> INVALID WORD (dot in word)
+# - "1.あ" -> NOT TWO CHARS
+
 
 class DummyGenerator:
     def __init__(self):
@@ -130,6 +150,7 @@ def _build_handler(
             "need_word": "NEED WORD",
             "not_two_chars": "NOT TWO CHARS",
             "invalid_word": "INVALID WORD",
+            "invalid_number": "INVALID NUMBER",
             "answer_correct": "CORRECT",
             "answer_incorrect": "INCORRECT",
             "error_prefix": "ERROR: ",
@@ -140,8 +161,6 @@ def _build_handler(
             "help": ["help"],
             "setting": "set",
             "font": "font",
-            "question": "question",
-            "answer": "answer",
             "list": "list",
             "menu_generate": "menu_generate",
             "menu_register": "menu_register",
@@ -152,6 +171,7 @@ def _build_handler(
             "menu_font": "menu_font",
             "mode_common": "mode_common",
             "mode_union": "mode_union",
+            "font_prefix": "font_",
         },
         quick_reply_builder=quick_reply_builder,
         default_font_key="default",
@@ -294,7 +314,7 @@ def test_font_command_updates_user_setting(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "font mincho"},
+                "message": {"type": "text", "text": "font_mincho"},
                 "source": {"userId": "u1"},
             }
         ]
@@ -306,72 +326,6 @@ def test_font_command_updates_user_setting(monkeypatch):
     assert status == 200
     assert store.data == {"user:u1": {"font": "mincho"}}
     assert "FONT mincho" in captured["json"]["messages"][0]["text"]
-
-
-def test_question_command_returns_question_image_only(monkeypatch):
-    store = InMemoryStore()
-    generator = DummyGenerator()
-    logger = DummyLogger()
-    captured = {}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        captured["json"] = json
-        return DummyResponse()
-
-    monkeypatch.setattr("line.reply.requests.post", fake_post)
-
-    handler = _build_handler(store, generator, logger, lambda: None)
-    payload = {
-        "events": [
-            {
-                "type": "message",
-                "replyToken": "rt",
-                "message": {"type": "text", "text": "question ab"},
-                "source": {"userId": "u1"},
-            }
-        ]
-    }
-    body = json.dumps(payload).encode("utf-8")
-    signature = _sign(body, "secret")
-
-    text, status = handler.handle_callback(body, signature)
-    assert status == 200
-    messages = captured["json"]["messages"]
-    assert len(messages) == 1
-    assert messages[0]["originalContentUrl"].endswith("/q/ab")
-
-
-def test_answer_command_returns_answer_image_only(monkeypatch):
-    store = InMemoryStore()
-    generator = DummyGenerator()
-    logger = DummyLogger()
-    captured = {}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        captured["json"] = json
-        return DummyResponse()
-
-    monkeypatch.setattr("line.reply.requests.post", fake_post)
-
-    handler = _build_handler(store, generator, logger, lambda: None)
-    payload = {
-        "events": [
-            {
-                "type": "message",
-                "replyToken": "rt",
-                "message": {"type": "text", "text": "answer ab"},
-                "source": {"userId": "u1"},
-            }
-        ]
-    }
-    body = json.dumps(payload).encode("utf-8")
-    signature = _sign(body, "secret")
-
-    text, status = handler.handle_callback(body, signature)
-    assert status == 200
-    messages = captured["json"]["messages"]
-    assert len(messages) == 1
-    assert messages[0]["originalContentUrl"].endswith("/a/ab")
 
 
 def test_setting_command_updates_font(monkeypatch):
@@ -866,3 +820,96 @@ def test_quiz_register_invalid_word(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     assert captured["json"]["messages"][0]["text"] == "INVALID WORD"
+
+
+def test_quiz_register_invalid_number(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "11.国語"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "INVALID NUMBER"
+
+
+def test_quiz_register_invalid_word_after_dot(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "1.3.てすと"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "INVALID WORD"
+
+
+def test_quiz_register_too_short_word(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "1.あ"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "NOT TWO CHARS"

@@ -63,19 +63,12 @@ class LineCommandParser:
                 return {"type": "menu_font"}
             return {"type": "font", "value": font_value.strip()}
 
-        question_keyword = str(self.keywords.get("question", ""))
-        if stripped.startswith(question_keyword):
-            _, _, word = stripped.partition(" ")
-            if not word and len(stripped) > len(question_keyword):
-                word = stripped[len(question_keyword) :]
-            return {"type": "question", "word": word.strip()}
-
-        answer_keyword = str(self.keywords.get("answer", ""))
-        if stripped.startswith(answer_keyword):
-            _, _, word = stripped.partition(" ")
-            if not word and len(stripped) > len(answer_keyword):
-                word = stripped[len(answer_keyword) :]
-            return {"type": "answer", "word": word.strip()}
+        font_prefix = str(self.keywords.get("font_prefix", ""))
+        if font_prefix and stripped.startswith(font_prefix):
+            font_value = stripped[len(font_prefix) :].strip()
+            if not font_value:
+                return {"type": "menu_font"}
+            return {"type": "font", "value": font_value}
 
         if "." in stripped:
             return {"type": "unknown"}
