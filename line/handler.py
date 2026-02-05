@@ -302,7 +302,7 @@ class LineHandler:
                     reply_token, [self._text_message(self.texts.get("need_word", ""))]
                 )
                 return
-            if len(word) == 2 and not self.parser._is_allowed_word(word):
+            if len(word) >= 2 and not self.parser._is_allowed_word(word):
                 msg = self._text_message(self.texts.get("invalid_word", ""))
                 self._reply(reply_token, [msg])
                 return
@@ -321,12 +321,13 @@ class LineHandler:
                     u_url = self.image_store.get_image_url(
                         "u", word, font_key, u_path
                     )
-                    a_url = self.image_store.get_image_url(
-                        "a", word, font_key, a_path
-                    )
                     messages.append(self._image_message(q_url))
                     messages.append(self._image_message(u_url))
-                    messages.append(self._image_message(a_url))
+                    if a_path:
+                        a_url = self.image_store.get_image_url(
+                            "a", word, font_key, a_path
+                        )
+                        messages.append(self._image_message(a_url))
                     self._reply(reply_token, messages)
                     self.image_store.cleanup([q_path, a_path, u_path])
                 else:

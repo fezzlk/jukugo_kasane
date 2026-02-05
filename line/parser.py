@@ -98,7 +98,7 @@ class LineCommandParser:
         return {key: value}
 
     def _is_two_char_word(self, text: str) -> bool:
-        return len(text) == 2
+        return 2 <= len(text) <= 8
 
     def _is_allowed_word(self, text: str) -> bool:
         for char in text:

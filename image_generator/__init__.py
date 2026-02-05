@@ -147,6 +147,38 @@ class ImageGenerator:
 
         return u_image
 
+    def _process_intersection_pixels(self, kanji_images: list) -> Image.Image:
+        """ピクセル処理で共通部分画像を生成"""
+        pixels = [img.load() for img in kanji_images]
+        q_image = Image.new("RGB", (1024, 1024))
+        q_pix = q_image.load()
+
+        for x, y in product(*map(range, (1024, 1024))):
+            all_black = True
+            for p in pixels:
+                if p[x, y] != BLACK:
+                    all_black = False
+                    break
+            q_pix[x, y] = BLACK if all_black else WHITE
+
+        return q_image
+
+    def _process_union_pixels_multi(self, kanji_images: list) -> Image.Image:
+        """ピクセル処理で和集合画像を生成（多文字対応）"""
+        pixels = [img.load() for img in kanji_images]
+        u_image = Image.new("RGB", (1024, 1024))
+        u_pix = u_image.load()
+
+        for x, y in product(*map(range, (1024, 1024))):
+            any_black = False
+            for p in pixels:
+                if p[x, y] == BLACK:
+                    any_black = True
+                    break
+            u_pix[x, y] = BLACK if any_black else WHITE
+
+        return u_image
+
     def generate_images(self, word: str, font_key: str = "default") -> tuple:
         """画像を生成して保存"""
         if len(word) != 2:
@@ -183,18 +215,22 @@ class ImageGenerator:
 
     def generate_images_with_union(self, word: str, font_key: str = "default") -> tuple:
         """問題画像・解答画像・和集合画像を生成して保存"""
-        if len(word) != 2:
-            raise ValueError("お題は二文字にしてください。")
+        if len(word) < 2 or len(word) > 8:
+            raise ValueError("お題は二〜八文字にしてください。")
 
         normalized_font_key = self.normalize_font_key(font_key)
         logger.info(f"画像生成開始(和集合): {word}, font_key: {normalized_font_key}")
 
         font = self._get_font_for_key(normalized_font_key)
-        kanji1 = self._create_kanji_image(word[0], font)
-        kanji2 = self._create_kanji_image(word[1], font)
+        kanji_images = [self._create_kanji_image(char, font) for char in word]
 
-        q_image, a_image = self._process_pixels(kanji1, kanji2)
-        u_image = self._process_union_pixels(kanji1, kanji2)
+        a_image = None
+        if len(word) == 2:
+            q_image, a_image = self._process_pixels(kanji_images[0], kanji_images[1])
+            u_image = self._process_union_pixels(kanji_images[0], kanji_images[1])
+        else:
+            q_image = self._process_intersection_pixels(kanji_images)
+            u_image = self._process_union_pixels_multi(kanji_images)
 
         suffix = "" if normalized_font_key == "default" else f"_{normalized_font_key}"
         q_filename = f"Q_{word}{suffix}.png"
@@ -206,12 +242,16 @@ class ImageGenerator:
         u_path = os.path.join(self.images_dir, u_filename)
 
         q_image.save(q_path)
-        a_image.save(a_path)
+        if a_image is not None:
+            a_image.save(a_path)
         u_image.save(u_path)
 
-        logger.info(f"画像保存完了: {q_filename}, {a_filename}, {u_filename}")
+        if a_image is not None:
+            logger.info(f"画像保存完了: {q_filename}, {a_filename}, {u_filename}")
+        else:
+            logger.info(f"画像保存完了: {q_filename}, {u_filename}")
 
-        return q_path, a_path, u_path
+        return q_path, a_path if a_image is not None else None, u_path
 
 
 # Flask アプリケーションのルート定義

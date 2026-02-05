@@ -171,7 +171,7 @@ line_texts = {
     "font_set": "フォントを {font} に設定しました。",
     "save_failed": "設定の保存に失敗しました。",
     "need_word": "熟語を指定してください。",
-    "not_two_chars": "二字熟語を送るとその共通部分を返します。",
+    "not_two_chars": "二〜八字の熟語を送るとその共通部分を返します。",
     "invalid_word": "使用できない文字が含まれています。",
     "answer_correct": "正解",
     "answer_incorrect": "不正解",

@@ -676,7 +676,7 @@ def test_not_two_chars_returns_notice(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "abc"},
+                "message": {"type": "text", "text": "a"},
                 "source": {"userId": "u1"},
             }
         ]
