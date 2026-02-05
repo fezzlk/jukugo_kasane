@@ -10,6 +10,9 @@ class BaseImageStore:
     def get_image_url(self, kind: str, word: str, font_key: str, local_path: str) -> str:
         raise NotImplementedError
 
+    def get_video_url(self, kind: str, word: str, font_key: str, local_path: str) -> str:
+        raise NotImplementedError
+
     def cleanup(self, paths: list) -> None:
         return None
 
@@ -32,6 +35,17 @@ class LocalImageStore(BaseImageStore):
             font_param = f"?font={font_key}"
         return f"{self.server_fqdn}/{kind}/{safe_word}{font_param}"
 
+    def get_video_url(self, kind: str, word: str, font_key: str, local_path: str) -> str:
+        if not self.server_fqdn:
+            raise ValueError("SERVER_FQDN is required for LINE video replies.")
+        if not self.server_fqdn.startswith("https://"):
+            raise ValueError("SERVER_FQDN must start with https:// for LINE videos.")
+        safe_word = quote(word)
+        font_param = ""
+        if font_key and font_key != "default":
+            font_param = f"?font={font_key}"
+        return f"{self.server_fqdn}/{kind}/{safe_word}{font_param}"
+
 
 class GcsImageStore(BaseImageStore):
     def __init__(self, bucket: str, prefix: str, logger):
@@ -46,7 +60,18 @@ class GcsImageStore(BaseImageStore):
             raise ValueError("Local image file is missing.")
 
         object_name = self._build_object_name(kind, word, font_key, local_path)
-        self._upload_file(object_name, local_path)
+        self._upload_file(object_name, local_path, "image/png")
+        quoted_name = quote(object_name, safe="/")
+        return f"https://storage.googleapis.com/{self.bucket}/{quoted_name}"
+
+    def get_video_url(self, kind: str, word: str, font_key: str, local_path: str) -> str:
+        if not self.bucket:
+            raise ValueError("LINE_GCS_BUCKET is required for GCS video storage.")
+        if not local_path or not os.path.exists(local_path):
+            raise ValueError("Local video file is missing.")
+
+        object_name = self._build_object_name(kind, word, font_key, local_path)
+        self._upload_file(object_name, local_path, "video/mp4")
         quoted_name = quote(object_name, safe="/")
         return f"https://storage.googleapis.com/{self.bucket}/{quoted_name}"
 
@@ -73,7 +98,7 @@ class GcsImageStore(BaseImageStore):
             return f"{self.prefix}/{base}"
         return base
 
-    def _upload_file(self, object_name: str, local_path: str) -> None:
+    def _upload_file(self, object_name: str, local_path: str, content_type: str) -> None:
         access_token = self._get_gcs_access_token()
         if not access_token:
             raise ValueError("GCS access token is missing.")
@@ -83,7 +108,7 @@ class GcsImageStore(BaseImageStore):
         )
         headers = {
             "Authorization": f"Bearer {access_token}",
-            "Content-Type": "image/png",
+            "Content-Type": content_type,
         }
         with open(local_path, "rb") as f:
             response = requests.post(url, headers=headers, data=f.read(), timeout=10)

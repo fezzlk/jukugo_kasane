@@ -22,6 +22,10 @@ class DummyGenerator:
             f"/tmp/U_{word}.png",
         )
 
+    def generate_union_video(self, word, font_key, fps=1):
+        self.calls.append((word, font_key, "video", fps))
+        return (f"/tmp/V_{word}.mp4", f"/tmp/P_{word}.png")
+
     def normalize_font_key(self, text):
         if text not in ("default", "mincho"):
             raise ValueError("invalid font")
@@ -78,6 +82,10 @@ def _build_handler(
         def get_image_url(self, kind, word, font_key, local_path):
             self.calls.append((kind, word, font_key, local_path))
             return f"https://example.com/{kind}/{word}"
+
+        def get_video_url(self, kind, word, font_key, local_path):
+            self.calls.append((kind, word, font_key, local_path))
+            return f"https://example.com/{kind}/{word}.mp4"
 
         def cleanup(self, paths):
             self.cleaned.append(list(paths))
@@ -227,6 +235,40 @@ def test_text_message_returns_text_and_both_images(monkeypatch):
     assert messages[1]["originalContentUrl"].endswith("/q/ab")
     assert messages[2]["originalContentUrl"].endswith("/u/ab")
     assert messages[3]["originalContentUrl"].endswith("/a/ab")
+
+
+def test_text_message_returns_video_for_three_chars(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "abc"},
+                "source": {"userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert generator.calls == [("abc", "default", "video", 1)]
+    messages = captured["json"]["messages"]
+    assert messages[0]["type"] == "text"
+    assert messages[1]["type"] == "video"
 
 
 def test_font_command_updates_user_setting(monkeypatch):

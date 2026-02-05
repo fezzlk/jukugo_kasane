@@ -2,6 +2,9 @@ import os
 import logging
 import re
 from itertools import product
+import shutil
+import subprocess
+import tempfile
 from PIL import Image, ImageDraw, ImageFont
 
 # ログ設定
@@ -179,6 +182,35 @@ class ImageGenerator:
 
         return u_image
 
+    def _process_step_pixels(self, kanji_images: list, step_index: int) -> Image.Image:
+        """ピクセル処理で段階画像を生成"""
+        group1 = kanji_images[:step_index]
+        group2 = kanji_images[step_index]
+        group1_pixels = [img.load() for img in group1]
+        group2_pixels = group2.load()
+
+        frame = Image.new("RGB", (1024, 1024))
+        frame_pix = frame.load()
+
+        for x, y in product(*map(range, (1024, 1024))):
+            group1_black = False
+            for p in group1_pixels:
+                if p[x, y] == BLACK:
+                    group1_black = True
+                    break
+            group2_black = group2_pixels[x, y] == BLACK
+
+            if group1_black and group2_black:
+                frame_pix[x, y] = PURPLE
+            elif group1_black and not group2_black:
+                frame_pix[x, y] = RED
+            elif not group1_black and group2_black:
+                frame_pix[x, y] = BLUE
+            else:
+                frame_pix[x, y] = WHITE
+
+        return frame
+
     def generate_images(self, word: str, font_key: str = "default") -> tuple:
         """画像を生成して保存"""
         if len(word) != 2:
@@ -252,6 +284,60 @@ class ImageGenerator:
             logger.info(f"画像保存完了: {q_filename}, {u_filename}")
 
         return q_path, a_path if a_image is not None else None, u_path
+
+    def generate_union_video(self, word: str, font_key: str = "default", fps: int = 1) -> tuple:
+        """段階画像を生成して動画に変換"""
+        if len(word) < 3 or len(word) > 8:
+            raise ValueError("お題は三〜八文字にしてください。")
+
+        normalized_font_key = self.normalize_font_key(font_key)
+        logger.info(f"動画生成開始: {word}, font_key: {normalized_font_key}")
+
+        font = self._get_font_for_key(normalized_font_key)
+        kanji_images = [self._create_kanji_image(char, font) for char in word]
+
+        temp_dir = tempfile.mkdtemp(prefix="frames_", dir=self.images_dir)
+        frame_paths = []
+        try:
+            for idx in range(1, len(word)):
+                frame = self._process_step_pixels(kanji_images, idx)
+                frame_name = f"frame_{idx:03d}.png"
+                frame_path = os.path.join(temp_dir, frame_name)
+                frame.save(frame_path)
+                frame_paths.append(frame_path)
+
+            suffix = "" if normalized_font_key == "default" else f"_{normalized_font_key}"
+            video_filename = f"V_{word}{suffix}.mp4"
+            preview_filename = f"P_{word}{suffix}.png"
+            video_path = os.path.join(self.images_dir, video_filename)
+            preview_path = os.path.join(self.images_dir, preview_filename)
+
+            if frame_paths:
+                shutil.copyfile(frame_paths[0], preview_path)
+
+            self._build_video_from_frames(temp_dir, fps, video_path)
+            logger.info(f"動画保存完了: {video_filename}")
+            return video_path, preview_path
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _build_video_from_frames(self, frame_dir: str, fps: int, output_path: str) -> None:
+        """ffmpegでフレーム画像を動画に変換"""
+        pattern = os.path.join(frame_dir, "frame_%03d.png")
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-framerate",
+            str(fps),
+            "-i",
+            pattern,
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            output_path,
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # Flask アプリケーションのルート定義

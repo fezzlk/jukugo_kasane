@@ -402,6 +402,36 @@ def get_u(word):
         return str(e), 400
 
 
+@app.route("/p/<word>")
+def get_p(word):
+    """動画プレビュー画像を返す"""
+    try:
+        font_key = generator.normalize_font_key(request.args.get("font"))
+        suffix = "" if font_key == "default" else f"_{font_key}"
+        filename = f"P_{word}{suffix}.png"
+        file_path = os.path.join(generator.images_dir, filename)
+        if not os.path.exists(file_path):
+            generator.generate_union_video(word, font_key, fps=1)
+        return send_from_directory(generator.images_dir, filename)
+    except ValueError as e:
+        return str(e), 400
+
+
+@app.route("/v/<word>")
+def get_v(word):
+    """動画を返す"""
+    try:
+        font_key = generator.normalize_font_key(request.args.get("font"))
+        suffix = "" if font_key == "default" else f"_{font_key}"
+        filename = f"V_{word}{suffix}.mp4"
+        file_path = os.path.join(generator.images_dir, filename)
+        if not os.path.exists(file_path):
+            generator.generate_union_video(word, font_key, fps=1)
+        return send_from_directory(generator.images_dir, filename)
+    except ValueError as e:
+        return str(e), 400
+
+
 @app.route("/health", methods=["GET"])
 def health_check():
     """ヘルスチェック"""
