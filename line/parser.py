@@ -77,6 +77,9 @@ class LineCommandParser:
                 word = stripped[len(answer_keyword) :]
             return {"type": "answer", "word": word.strip()}
 
+        if "." in stripped:
+            return {"type": "unknown"}
+
         if self._is_two_char_word(stripped):
             if not self._is_allowed_word(stripped):
                 return {"type": "invalid_word"}

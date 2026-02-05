@@ -456,7 +456,7 @@ def test_menu_generate_returns_prompt(monkeypatch):
                 "type": "message",
                 "replyToken": "rt",
                 "message": {"type": "text", "text": "menu_generate"},
-                "source": {"type": "user", "userId": "u1"},
+            "source": {"userId": "u1"},
             }
         ]
     }
@@ -795,6 +795,68 @@ def test_invalid_word_replies_with_notice(monkeypatch):
                 "replyToken": "rt",
                 "message": {"type": "text", "text": "a!"},
                 "source": {"userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "INVALID WORD"
+
+
+def test_quiz_register_with_three_chars(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "1.音楽性"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert handler.quiz_store.data["user:u1"][1] == "音楽性"
+
+
+def test_quiz_register_invalid_word(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "1.ab!"},
+                "source": {"type": "user", "userId": "u1"},
             }
         ]
     }

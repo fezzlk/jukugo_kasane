@@ -189,6 +189,10 @@ class LineHandler:
                 )
                 self._reply(reply_token, [msg])
                 return
+            if self._has_quiz_pattern(text) and not set_payload:
+                msg = self._text_message(self.texts.get("invalid_word", ""))
+                self._reply(reply_token, [msg])
+                return
 
         if source_type in ("group", "room"):
             if self._is_group_quiz_enabled():
@@ -504,9 +508,12 @@ class LineHandler:
         }
 
     def _match_quiz_pattern(self, text: str) -> Optional[tuple]:
-        match = re.search(r"(10|[1-9])\.(..)", text)
+        match = re.search(r"(10|[1-9])\.(.{2,8})", text)
         if not match:
             return None
         number = int(match.group(1))
-        word = match.group(2)
+        word = match.group(2).strip()
         return number, word
+
+    def _has_quiz_pattern(self, text: str) -> bool:
+        return bool(re.search(r"(10|[1-9])\.", text))
