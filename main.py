@@ -159,7 +159,7 @@ def build_line_font_quick_reply() -> dict:
 
 
 line_texts = {
-    "welcome_prefix": "文字合成ボットです。\n\n",
+    "welcome_prefix": "文字合成ボットです。\n文字の共通部分と和集合を画像生成します\n\n",
     "usage": build_line_usage_text(),
     "generate_prompt": "合成する文字を送信してください。",
     "register_help": "「1.出題文字」のように送信すると出題用に文字を登録します。",
