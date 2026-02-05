@@ -106,7 +106,9 @@ class LineHandler:
 
         text = message.get("text", "")
         command = self.parser.parse(text)
-        if text.startswith("font_") and command.get("type") == "unknown":
+        if source_type in ("group", "room"):
+            command = {"type": "unknown"}
+        if text.startswith("font_"):
             value = text[len("font_") :].strip()
             if value:
                 command = {"type": "font", "value": value}
@@ -202,64 +204,71 @@ class LineHandler:
                     return
 
         if source_type in ("group", "room"):
-            if self._is_group_quiz_enabled():
-                if self._is_bot_mentioned(message):
-                    number = self._extract_quiz_number(text)
-                    if number:
-                        sender_id = event.get("source", {}).get("userId", "")
-                        sender_key = f"user:{sender_id}" if sender_id else user_key
-                        sender_settings = self._get_user_settings(sender_key)
-                        sender_font = sender_settings.get("font", font_key)
-                        quiz_mode = sender_settings.get("quiz_mode", "intersection")
-                        stored_word = self.quiz_store.get_word(sender_key, number)
-                        if stored_word:
-                            try:
-                                if quiz_mode == "union":
-                                    q_path, a_path, u_path = (
-                                        self.generator.generate_images_with_union(
-                                            stored_word, sender_font
-                                        )
-                                    )
-                                    u_url = self.image_store.get_image_url(
-                                        "u", stored_word, sender_font, u_path
-                                    )
-                                    self._reply(
-                                        reply_token, [self._image_message(u_url)]
-                                    )
-                                    self.image_store.cleanup([q_path, a_path, u_path])
-                                else:
-                                    q_path, a_path = self.generator.generate_images(
-                                        stored_word, sender_font
-                                    )
-                                    q_url = self.image_store.get_image_url(
-                                        "q", stored_word, sender_font, q_path
-                                    )
-                                    self._reply(
-                                        reply_token, [self._image_message(q_url)]
-                                    )
-                                    self.image_store.cleanup([q_path, a_path])
-                            except Exception as exc:
-                                self.logger.error(
-                                    "LINE group quiz generate error: %s", exc
-                                )
-                        return
-            answer_payload = self._parse_answer_submission(event)
-            if answer_payload:
-                if answer_payload[0] == "invalid":
-                    sender_user_id = answer_payload[1]
-                    mention = self._build_mention_message(
-                        sender_user_id, self.texts.get("invalid_word", "")
-                    )
-                    self._reply(reply_token, [mention])
+            if not self._is_group_quiz_enabled():
+                return
+            mentionees = message.get("mention", {}).get("mentionees", [])
+            sender_id = event.get("source", {}).get("userId", "")
+            sender_key = f"user:{sender_id}" if sender_id else user_key
+            tokens = text.split()
+            last_token = tokens[-1] if tokens else ""
+
+            if self._is_bot_mentioned(message):
+                number = int(last_token) if last_token.isdigit() else 0
+                if number < 1 or number > 10:
+                    msg = self._text_message(self.texts.get("invalid_number", ""))
+                    self._reply(reply_token, [msg])
                     return
-                target_user_id, sender_user_id, number, word = answer_payload
-                stored_word = self.quiz_store.get_word(f"user:{target_user_id}", number)
-                if stored_word and stored_word == word:
-                    result = self.texts.get("answer_correct", "正解")
-                else:
-                    result = self.texts.get("answer_incorrect", "不正解")
-                mention = self._build_mention_message(sender_user_id, result)
-                self._reply(reply_token, [mention])
+                stored_word = self.quiz_store.get_word(sender_key, number)
+                if not stored_word:
+                    msg = self._text_message(f"{number}問目は未登録です。")
+                    self._reply(reply_token, [msg])
+                    return
+                sender_settings = self._get_user_settings(sender_key)
+                sender_font = sender_settings.get("font", font_key)
+                quiz_mode = sender_settings.get("quiz_mode", "intersection")
+                try:
+                    if quiz_mode == "union":
+                        q_path, a_path, u_path = (
+                            self.generator.generate_images_with_union(
+                                stored_word, sender_font
+                            )
+                        )
+                        u_url = self.image_store.get_image_url(
+                            "u", stored_word, sender_font, u_path
+                        )
+                        self._reply(reply_token, [self._image_message(u_url)])
+                        self.image_store.cleanup([q_path, a_path, u_path])
+                    else:
+                        q_path, a_path = self.generator.generate_images(
+                            stored_word, sender_font
+                        )
+                        q_url = self.image_store.get_image_url(
+                            "q", stored_word, sender_font, q_path
+                        )
+                        self._reply(reply_token, [self._image_message(q_url)])
+                        self.image_store.cleanup([q_path, a_path])
+                except Exception as exc:
+                    self.logger.error("LINE group quiz generate error: %s", exc)
+                return
+
+            if len(mentionees) == 1:
+                target_id = mentionees[0].get("userId", "")
+                if target_id and target_id != self.bot_user_id:
+                    quiz_status = self._parse_quiz_message(last_token)
+                    if not quiz_status or quiz_status[0] != "ok":
+                        msg = self._text_message(
+                            "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)"
+                        )
+                        self._reply(reply_token, [msg])
+                        return
+                    _, number, word = quiz_status
+                    stored_word = self.quiz_store.get_word(f"user:{target_id}", number)
+                    if stored_word and stored_word == word:
+                        result = self.texts.get("answer_correct", "正解")
+                    else:
+                        result = self.texts.get("answer_incorrect", "不正解")
+                    mention = self._build_mention_message(sender_id, result)
+                    self._reply(reply_token, [mention])
                 return
 
         if command["type"] == "setting":

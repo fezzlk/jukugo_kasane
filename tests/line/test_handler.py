@@ -24,6 +24,10 @@ from line.handler import LineHandler
 # - "11.国語" -> INVALID NUMBER
 # - "1.3.てすと" -> INVALID WORD (dot in word)
 # - "1.あ" -> NOT TWO CHARS
+# - group: mention bot + "11" -> INVALID NUMBER
+# - group: mention bot + "1" without registration -> "1問目は未登録です。"
+# - group: mention bot + "1" with union -> U image reply
+# - group: mention user + "1.音楽性" -> CORRECT/INCORRECT mention to sender
 
 
 class DummyGenerator:
@@ -93,6 +97,7 @@ def _build_handler(
     settings_builder=None,
     mode_builder=None,
     font_builder=None,
+    bot_user_id="bot",
 ):
     class DummyImageStore:
         def __init__(self):
@@ -180,6 +185,7 @@ def _build_handler(
         settings_quick_reply_builder=settings_builder,
         mode_quick_reply_builder=mode_builder,
         font_quick_reply_builder=font_builder,
+        bot_user_id=bot_user_id,
     )
 
 
@@ -913,3 +919,188 @@ def test_quiz_register_too_short_word(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     assert captured["json"]["messages"][0]["text"] == "NOT TWO CHARS"
+
+
+def test_group_bot_mention_invalid_number(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 11",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "INVALID NUMBER"
+
+
+def test_group_bot_mention_unregistered(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 1",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "1問目は未登録です。"
+
+
+def test_group_bot_mention_union_image(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    store.data["user:u1"] = {"quiz_mode": "union"}
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    handler.quiz_store.set_word("user:u1", 1, "ab")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 1",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]
+    assert message["type"] == "image"
+    assert message["originalContentUrl"].endswith("/u/ab")
+
+
+def test_group_answer_format_error(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@user 1-音",
+                    "mention": {"mentionees": [{"userId": "u2"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert (
+        captured["json"]["messages"][0]["text"]
+        == "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)"
+    )
+
+
+def test_group_answer_correct(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    handler.quiz_store.set_word("user:u2", 1, "音楽性")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@user 1.音楽性",
+                    "mention": {"mentionees": [{"userId": "u2"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]
+    assert message["text"].endswith("CORRECT")
+    assert message["mention"]["mentionees"][0]["userId"] == "u1"
