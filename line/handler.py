@@ -313,6 +313,18 @@ class LineHandler:
                         self._text_message(f"「{word}」の共通部分です。")
                     )
                     if len(word) >= 3:
+                        q_path, a_path, u_path = (
+                            self.generator.generate_images_with_union(word, font_key)
+                        )
+                        q_url = self.image_store.get_image_url(
+                            "q", word, font_key, q_path
+                        )
+                        u_url = self.image_store.get_image_url(
+                            "u", word, font_key, u_path
+                        )
+                        messages.append(self._image_message(q_url))
+                        messages.append(self._image_message(u_url))
+
                         video_path, preview_path = self.generator.generate_union_video(
                             word, font_key, fps=1
                         )
@@ -330,7 +342,9 @@ class LineHandler:
                             }
                         )
                         self._reply(reply_token, messages)
-                        self.image_store.cleanup([video_path, preview_path])
+                        self.image_store.cleanup(
+                            [q_path, a_path, u_path, video_path, preview_path]
+                        )
                     else:
                         q_path, a_path, u_path = (
                             self.generator.generate_images_with_union(word, font_key)

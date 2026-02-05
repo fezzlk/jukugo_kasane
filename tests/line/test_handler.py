@@ -265,10 +265,15 @@ def test_text_message_returns_video_for_three_chars(monkeypatch):
 
     text, status = handler.handle_callback(body, signature)
     assert status == 200
-    assert generator.calls == [("abc", "default", "video", 1)]
+    assert generator.calls == [
+        ("abc", "default", "union"),
+        ("abc", "default", "video", 1),
+    ]
     messages = captured["json"]["messages"]
     assert messages[0]["type"] == "text"
-    assert messages[1]["type"] == "video"
+    assert messages[1]["type"] == "image"
+    assert messages[2]["type"] == "image"
+    assert messages[3]["type"] == "video"
 
 
 def test_font_command_updates_user_setting(monkeypatch):
