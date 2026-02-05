@@ -16,11 +16,6 @@ class LineCommandParser:
         if setting:
             return {"type": "setting", "setting": setting}
 
-        font_keyword = str(self.keywords.get("font", ""))
-        if stripped.startswith(font_keyword):
-            _, _, font_value = stripped.partition(" ")
-            return {"type": "font", "value": font_value.strip()}
-
         list_keyword = str(self.keywords.get("list", ""))
         if list_keyword and stripped == list_keyword:
             return {"type": "list"}
@@ -60,6 +55,13 @@ class LineCommandParser:
         mode_union = str(self.keywords.get("mode_union", ""))
         if mode_union and stripped == mode_union:
             return {"type": "mode_union"}
+
+        font_keyword = str(self.keywords.get("font", ""))
+        if stripped.startswith(font_keyword):
+            _, _, font_value = stripped.partition(" ")
+            if not font_value.strip():
+                return {"type": "menu_font"}
+            return {"type": "font", "value": font_value.strip()}
 
         question_keyword = str(self.keywords.get("question", ""))
         if stripped.startswith(question_keyword):

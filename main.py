@@ -143,14 +143,26 @@ def build_line_mode_quick_reply() -> dict:
 
 
 def build_line_font_quick_reply() -> dict:
+    default_key = generator.get_default_font_key()
+    default_label = "デフォルト"
+    if default_key == "mincho":
+        default_label = "明朝(デフォルト)"
+    font_labels = {
+        "default": default_label,
+        "mincho": "明朝",
+        "monogothic": "源暎ゴシック",
+        "hiragino": "ヒラギノ",
+        "dejavu": "DejaVuSans",
+    }
     items = []
     for font_key in generator.get_font_keys():
+        label = font_labels.get(font_key, font_key)
         items.append(
             {
                 "type": "action",
                 "action": {
                     "type": "message",
-                    "label": f"font:{font_key}",
+                    "label": label,
                     "text": f"フォント {font_key}",
                 },
             }

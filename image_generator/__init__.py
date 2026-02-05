@@ -72,6 +72,17 @@ class ImageGenerator:
         """利用可能なフォント識別子を取得"""
         return ["default"] + list(self.font_key_order)
 
+    def get_default_font_key(self) -> str:
+        """デフォルトで選ばれるフォント識別子を取得"""
+        for font_path in self.default_font_paths:
+            if not os.path.exists(font_path):
+                continue
+            for key, value in self.font_key_map.items():
+                if value == font_path:
+                    return key
+            return "default"
+        return "default"
+
     def normalize_font_key(self, font_key: str) -> str:
         """フォント識別子を正規化"""
         if not font_key:
