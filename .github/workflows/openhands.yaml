@@ -1,0 +1,42 @@
+name: OpenHands Agent
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  openhands:
+    # 起動条件:
+    # - bot自身は除外
+    # - @openhands-agent が含まれる
+    # - 投稿者がコラボレータ以上（OWNER / MEMBER / COLLABORATOR）である
+    if: >
+      github.actor != 'github-actions[bot]' &&
+      (
+        contains(github.event.comment.body, '@openhands-agent') ||
+        contains(github.event.review.body, '@openhands-agent')
+      ) &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR' ||
+        github.event.review.author_association == 'OWNER' ||
+        github.event.review.author_association == 'MEMBER' ||
+        github.event.review.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OpenHands
+        uses: All-Hands-AI/openhands@main
+        with:
+          llm_provider: openai
+          api_key: ${{ secrets.OPENAI_API_KEY }}
