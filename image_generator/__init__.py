@@ -342,6 +342,13 @@ class ImageGenerator:
                 frame.save(frame_path)
                 frame_paths.append(frame_path)
 
+            intersection_frame = self._process_intersection_pixels(kanji_images)
+            intersection_index = len(word)
+            intersection_name = f"frame_{intersection_index:03d}.png"
+            intersection_path = os.path.join(temp_dir, intersection_name)
+            intersection_frame.save(intersection_path)
+            frame_paths.append(intersection_path)
+
             suffix = (
                 "" if normalized_font_key == "default" else f"_{normalized_font_key}"
             )
