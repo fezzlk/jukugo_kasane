@@ -440,12 +440,74 @@ class LineHandler:
         sender_key = f"user:{sender_id}" if sender_id else user_key
         remaining_text = self._strip_mention_text(text, mentionees).strip()
         tokens = remaining_text.split()
+        command_tokens = tokens
+        if tokens and tokens[0].startswith("@"):
+            command_tokens = tokens[1:]
+        command_text = " ".join(command_tokens).strip()
         last_token = tokens[-1] if tokens else ""
 
         if self._is_bot_mentioned(message):
-            number_text = (
-                remaining_text if remaining_text and not tokens else last_token
-            )
+            if command_text.startswith("答え"):
+                number = self._parse_answer_release_number(command_text)
+                if not number:
+                    answer_release_format = self.texts.get(
+                        "answer_release_format",
+                        f"解答発表は「@{self.texts.get('bot_name', '文字合成ボット')} "
+                        "答え (問題番号)」と送ってください。",
+                    )
+                    msg = self._text_message(answer_release_format)
+                    self._reply(reply_token, [msg])
+                    return
+                stored_word = self.quiz_store.get_word(sender_key, number)
+                if not stored_word:
+                    template = self.texts.get(
+                        "unregistered_template", "{number}問目は未登録です。"
+                    )
+                    msg = self._text_message(template.format(number=number))
+                    self._reply(reply_token, [msg])
+                    return
+                sender_settings = self._get_user_settings(sender_key)
+                sender_font = sender_settings.get("font", font_key)
+                try:
+                    if len(stored_word) >= 3:
+                        video_path, preview_path = self.generator.generate_union_video(
+                            stored_word, sender_font, fps=1
+                        )
+                        video_url = self.image_store.get_video_url(
+                            "v", stored_word, sender_font, video_path
+                        )
+                        preview_url = self.image_store.get_image_url(
+                            "p", stored_word, sender_font, preview_path
+                        )
+                        self._reply(
+                            reply_token,
+                            [
+                                {
+                                    "type": "video",
+                                    "originalContentUrl": video_url,
+                                    "previewImageUrl": preview_url,
+                                }
+                            ],
+                        )
+                        self.image_store.cleanup([video_path, preview_path])
+                    else:
+                        q_path, a_path, u_path = self.generator.generate_images_with_union(
+                            stored_word, sender_font
+                        )
+                        a_url = self.image_store.get_image_url(
+                            "a", stored_word, sender_font, a_path
+                        )
+                        self._reply(reply_token, [self._image_message(a_url)])
+                        self.image_store.cleanup([q_path, a_path, u_path])
+                except Exception as exc:
+                    self.logger.error("LINE answer release error: %s", exc)
+                    generate_failed = self.texts.get(
+                        "generate_failed", "画像の生成に失敗しました。"
+                    )
+                    err = f"{self.texts.get('error_prefix', '')}{generate_failed}"
+                    self._reply(reply_token, [self._text_message(err)])
+                return
+            number_text = command_text if command_text else last_token
             number = int(number_text) if number_text.isdigit() else 0
             if number < 1 or number > 10:
                 bot_name = self.texts.get("bot_name", "文字合成ボット")
@@ -686,3 +748,15 @@ class LineHandler:
             if isinstance(index, int) and isinstance(length, int) and length > 0:
                 trimmed = trimmed[:index] + trimmed[index + length :]
         return trimmed
+
+    def _parse_answer_release_number(self, text: str) -> int:
+        payload = text.strip()
+        if not payload.startswith("答え"):
+            return 0
+        number_text = payload[len("答え") :].strip()
+        if not number_text.isdigit():
+            return 0
+        number = int(number_text)
+        if number < 1 or number > 10:
+            return 0
+        return number

@@ -207,6 +207,7 @@ line_texts = {
     "quiz_dispatch_template": f"グループで「@{line_bot_name} {{number}}」と送ると出題されます。",
     "quiz_dispatch_list": f"グループで「@{line_bot_name} (問題番号)」と送ると出題されます。",
     "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
+    "answer_release_format": f"解答発表は「@{line_bot_name} 答え (問題番号)」と送ってください。",
     "quiz_unset": "未設定",
     "generate_failed": "画像の生成に失敗しました。",
     "answer_correct": "正解",

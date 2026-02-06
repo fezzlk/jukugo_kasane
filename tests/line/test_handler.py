@@ -171,6 +171,7 @@ def _build_handler(
             "quiz_dispatch_template": "グループで「@文字合成ボット {number}」と送ると出題されます。",
             "quiz_dispatch_list": "グループで「@文字合成ボット (問題番号)」と送ると出題されます。",
             "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
+            "answer_release_format": "解答発表は「@文字合成ボット 答え (問題番号)」と送ってください。",
             "quiz_unset": "未設定",
             "generate_failed": "画像の生成に失敗しました。",
             "answer_correct": "CORRECT",
@@ -1165,3 +1166,117 @@ def test_group_answer_unregistered(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     assert captured["json"]["messages"][0]["text"] == "1問目は未登録です。"
+
+
+def test_group_answer_release_invalid_format(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 答え 11",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert (
+        captured["json"]["messages"][0]["text"]
+        == "解答発表は「@文字合成ボット 答え (問題番号)」と送ってください。"
+    )
+
+
+def test_group_answer_release_two_chars(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    handler.quiz_store.set_word("user:u1", 1, "ab")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 答え 1",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]
+    assert message["type"] == "image"
+    assert message["originalContentUrl"].endswith("/a/ab")
+
+
+def test_group_answer_release_video(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    handler.quiz_store.set_word("user:u1", 1, "abcd")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 答え 1",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]
+    assert message["type"] == "video"
+    assert message["originalContentUrl"].endswith("/v/abcd.mp4")

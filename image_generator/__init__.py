@@ -19,7 +19,8 @@ WHITE = (255, 255, 255, 255)
 PURPLE = (70, 20, 190, 255)
 BLUE = (70, 65, 225, 255)
 RED = (230, 70, 70, 255)
-RED_SOFT = (230, 70, 70, 140)
+RED_SOFT = (230, 70, 70, 50)
+
 
 class ImageGenerator:
     """画像生成クラス"""
@@ -146,7 +147,9 @@ class ImageGenerator:
 
         return q_image, a_image
 
-    def _process_union_pixels(self, kanji1: Image.Image, kanji2: Image.Image) -> Image.Image:
+    def _process_union_pixels(
+        self, kanji1: Image.Image, kanji2: Image.Image
+    ) -> Image.Image:
         """ピクセル処理で和集合画像を生成"""
         p1 = kanji1.load()
         p2 = kanji2.load()
@@ -315,7 +318,9 @@ class ImageGenerator:
 
         return q_path, a_path if a_image is not None else None, u_path
 
-    def generate_union_video(self, word: str, font_key: str = "default", fps: int = 1) -> tuple:
+    def generate_union_video(
+        self, word: str, font_key: str = "default", fps: int = 1
+    ) -> tuple:
         """段階画像を生成して動画に変換"""
         if len(word) < 3 or len(word) > 8:
             raise ValueError("お題は三〜八文字にしてください。")
@@ -336,7 +341,9 @@ class ImageGenerator:
                 frame.save(frame_path)
                 frame_paths.append(frame_path)
 
-            suffix = "" if normalized_font_key == "default" else f"_{normalized_font_key}"
+            suffix = (
+                "" if normalized_font_key == "default" else f"_{normalized_font_key}"
+            )
             video_filename = f"V_{word}{suffix}.mp4"
             preview_filename = f"P_{word}{suffix}.png"
             video_path = os.path.join(self.images_dir, video_filename)
@@ -351,7 +358,9 @@ class ImageGenerator:
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def _build_video_from_frames(self, frame_dir: str, fps: int, output_path: str) -> None:
+    def _build_video_from_frames(
+        self, frame_dir: str, fps: int, output_path: str
+    ) -> None:
         """ffmpegでフレーム画像を動画に変換"""
         pattern = os.path.join(frame_dir, "frame_%03d.png")
         cmd = [
