@@ -9,6 +9,7 @@
 
 - GitHub Actions が Cloud Run ログを取得して `openhands_context/cloudrun_logs.txt` と
   `openhands_context/cloudrun_logs.json` に保存する。
+- 該当ファイルが見当たらない場合は未生成と判断しcloud run ログによる調査はスキップする。
 - バグ修正/原因調査の依頼では、まずこのログを読み、根拠となる行（例外文言やスタック）を引用して原因仮説を述べること。
 - ログだけで特定できない場合は、実装に着手する前に追加質問を返すこと（例：再現条件、該当リクエスト、直前のデプロイ等）。
 
