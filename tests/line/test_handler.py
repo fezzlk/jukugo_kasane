@@ -163,6 +163,9 @@ def _build_handler(
             "answer_format": "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)",
             "unregistered_template": "{number}問目は未登録です。",
             "mention_fallback": "user",
+            "quiz_prompt_common": "COMMON?",
+            "quiz_prompt_union": "UNION?",
+            "quiz_answer_template": "ANSWER @{name} {number}.(解答)",
             "quiz_unset": "未設定",
             "generate_failed": "画像の生成に失敗しました。",
             "answer_correct": "CORRECT",
@@ -1035,9 +1038,13 @@ def test_group_bot_mention_union_image(monkeypatch):
 
     text, status = handler.handle_callback(body, signature)
     assert status == 200
-    message = captured["json"]["messages"][0]
-    assert message["type"] == "image"
-    assert message["originalContentUrl"].endswith("/u/ab")
+    messages = captured["json"]["messages"]
+    assert messages[0]["type"] == "text"
+    assert messages[0]["text"] == "UNION?"
+    assert messages[1]["type"] == "image"
+    assert messages[1]["originalContentUrl"].endswith("/u/ab")
+    assert messages[2]["type"] == "text"
+    assert messages[2]["text"] == "ANSWER @Tester 1.(解答)"
 
 
 def test_group_answer_format_error(monkeypatch):

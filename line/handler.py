@@ -110,7 +110,9 @@ class LineHandler:
 
         text = message.get("text", "")
         if source_type in ("group", "room"):
-            self._handle_group_message(event, message, user_key, font_key, text, reply_token)
+            self._handle_group_message(
+                event, message, user_key, font_key, text, reply_token
+            )
             return
 
         command = self.parser.parse(text)
@@ -310,7 +312,9 @@ class LineHandler:
             return self._handle_font_command(command, user_key, reply_token)
         return False
 
-    def _handle_font_command(self, command: dict, user_key: str, reply_token: str) -> bool:
+    def _handle_font_command(
+        self, command: dict, user_key: str, reply_token: str
+    ) -> bool:
         try:
             font_key = self._normalize_font_key(command["value"])
         except ValueError as exc:
@@ -352,9 +356,7 @@ class LineHandler:
             return True
         if status == "ok":
             old_word = self.quiz_store.set_word(user_key, number, word)
-            msg = self._text_message(
-                self._build_set_reply_text(number, word, old_word)
-            )
+            msg = self._text_message(self._build_set_reply_text(number, word, old_word))
             self._reply(reply_token, [msg])
             return True
         return False
@@ -364,7 +366,9 @@ class LineHandler:
     ) -> None:
         word = command.get("word", "")
         if not word:
-            self._reply(reply_token, [self._text_message(self.texts.get("need_word", ""))])
+            self._reply(
+                reply_token, [self._text_message(self.texts.get("need_word", ""))]
+            )
             return
         if len(word) >= 2 and not self.parser._is_allowed_word(word):
             msg = self._text_message(self.texts.get("invalid_word", ""))
@@ -439,7 +443,9 @@ class LineHandler:
         last_token = tokens[-1] if tokens else ""
 
         if self._is_bot_mentioned(message):
-            number_text = remaining_text if remaining_text and not tokens else last_token
+            number_text = (
+                remaining_text if remaining_text and not tokens else last_token
+            )
             number = int(number_text) if number_text.isdigit() else 0
             if number < 1 or number > 10:
                 msg = self._text_message(self.texts.get("invalid_number", ""))
@@ -456,6 +462,15 @@ class LineHandler:
             sender_settings = self._get_user_settings(sender_key)
             sender_font = sender_settings.get("font", font_key)
             quiz_mode = sender_settings.get("quiz_mode", "intersection")
+            display_name = self.profile_client.get_display_name(
+                event.get("source", {}), sender_id
+            )
+            display_name = display_name or self.texts.get("mention_fallback", "ユーザー")
+            answer_template = self.texts.get(
+                "quiz_answer_template",
+                "解答フォーマット: @{name} {number}.(解答) で回答してください。",
+            )
+            answer_text = answer_template.format(name=display_name, number=number)
             try:
                 if quiz_mode == "union":
                     q_path, a_path, u_path = self.generator.generate_images_with_union(
@@ -464,7 +479,15 @@ class LineHandler:
                     u_url = self.image_store.get_image_url(
                         "u", stored_word, sender_font, u_path
                     )
-                    self._reply(reply_token, [self._image_message(u_url)])
+                    prompt = self.texts.get("quiz_prompt_union", "何の和集合？")
+                    self._reply(
+                        reply_token,
+                        [
+                            self._text_message(prompt),
+                            self._image_message(u_url),
+                            self._text_message(answer_text),
+                        ],
+                    )
                     self.image_store.cleanup([q_path, a_path, u_path])
                 else:
                     q_path, a_path = self.generator.generate_images(
@@ -473,7 +496,15 @@ class LineHandler:
                     q_url = self.image_store.get_image_url(
                         "q", stored_word, sender_font, q_path
                     )
-                    self._reply(reply_token, [self._image_message(q_url)])
+                    prompt = self.texts.get("quiz_prompt_common", "何の共通部分？")
+                    self._reply(
+                        reply_token,
+                        [
+                            self._text_message(prompt),
+                            self._image_message(q_url),
+                            self._text_message(answer_text),
+                        ],
+                    )
                     self.image_store.cleanup([q_path, a_path])
             except Exception as exc:
                 self.logger.error("LINE group quiz generate error: %s", exc)
@@ -487,16 +518,16 @@ class LineHandler:
         if len(mentionees) == 1:
             target_id = mentionees[0].get("userId", "")
             if target_id and target_id != self.bot_user_id:
-                answer_text = remaining_text if remaining_text and not tokens else last_token
+                answer_text = (
+                    remaining_text if remaining_text and not tokens else last_token
+                )
                 quiz_status = self._parse_quiz_message(answer_text)
                 if not quiz_status or quiz_status[0] != "ok":
                     answer_format = self.texts.get(
                         "answer_format",
                         "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)",
                     )
-                    msg = self._text_message(
-                        answer_format
-                    )
+                    msg = self._text_message(answer_format)
                     self._reply(reply_token, [msg])
                     return
                 _, number, word = quiz_status
@@ -570,16 +601,24 @@ class LineHandler:
 
     def _build_set_reply_text(self, number: int, word: str, old_word: str) -> str:
         if old_word:
-            return f"第{number}問目に「{word}」をセットしました。元の熟語「{old_word}」を削除しました。"
-        return f"第{number}問目に「{word}」をセットしました。"
+            return (
+                f"第{number}問目に「{word}」をセットしました。"
+                f"元の熟語「{old_word}」を削除しました。\n"
+                f"出題: グループで「@文字合成ボット {number}」と送ると出題されます。"
+            )
+        return (
+            f"第{number}問目に「{word}」をセットしました。\n"
+            f"出題: グループで「@文字合成ボット {number}」と送ると出題されます。"
+        )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
         items = self.quiz_store.list_words(user_key)
         unset_label = self.texts.get("quiz_unset", "未設定")
-        lines = ["問題集"]
+        lines = ["問題一覧"]
         for number in range(1, 11):
             word = items.get(number, unset_label)
             lines.append(f"{number}. {word}")
+        lines.append("出題: グループで「@文字合成ボット (問題番号)」と送ると出題されます。")
         return "\n".join(lines)
 
     def _is_bot_mentioned(self, message: dict) -> bool:

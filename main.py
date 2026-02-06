@@ -78,13 +78,20 @@ def build_code_challenge(code_verifier: str) -> str:
 
 def build_line_usage_text() -> str:
     return (
-        "使い方:\n"
-        "・問題生成: 送ったメッセージの共通部分/和集合画像を生成します。（2〜8文字）\n"
-        "・問題登録: 「1.熟語」のように送ると出題用に熟語を登録します。（10問まで）\n"
-        "・問題一覧: 登録済みの熟語一覧を表示。\n"
-        "・設定: 出題モード（共通部分/和集合）、フォントを変更できます。\n"
-        "・出題: グループチャットで「@ボットへメンション + 数字」 で問題画像を出題します。\n"
-        "・正誤判定: グループチャットで「@出題者にメンション + 1.熟語」 のように解答すると正誤判定を行います。"
+        "【合成機能】\n"
+        "送信された文字（2〜8文字）を合成し、共通部分/和集合画像を生成します。\n"
+        "\n"
+        "【出題機能】\n"
+        "問題登録/一覧/出題/正誤判定を行います。\n"
+        "・問題登録: 「1.熟語」のように送信（10問まで）\n"
+        "・問題一覧: 「問題一覧」と送信\n"
+        "・出題: グループで「@文字合成ボット + (問題番号)」\n"
+        "・正誤判定: グループで「@(出題者) + (問題番号).(解答)」\n"
+        "\n"
+        "【設定機能】\n"
+        "出題モード（共通部分/和集合）とフォントを変更できます。\n"
+        "使い方: 「設定」ボタンから選択。\n"
+        "\n"
         "※ 画像生成には時間がかかる場合があります。"
     )
 
@@ -93,7 +100,7 @@ def build_line_quick_reply() -> dict:
     items = [
         {
             "type": "action",
-            "action": {"type": "message", "label": "問題生成", "text": "問題生成"},
+            "action": {"type": "message", "label": "合成", "text": "合成"},
         },
         {
             "type": "action",
@@ -191,6 +198,9 @@ line_texts = {
     "answer_format": "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)",
     "unregistered_template": "{number}問目は未登録です。",
     "mention_fallback": "ユーザー",
+    "quiz_prompt_common": "何の共通部分？",
+    "quiz_prompt_union": "何の和集合？",
+    "quiz_answer_template": "解答フォーマット: @{name} {number}.(解答) で回答してください。",
     "quiz_unset": "未設定",
     "generate_failed": "画像の生成に失敗しました。",
     "answer_correct": "正解",
@@ -204,8 +214,8 @@ line_keywords = {
     "help": ["使い方", "ヘルプ", "help"],
     "setting": "設定",
     "font": "フォント",
-    "list": "問題集",
-    "menu_generate": "問題生成",
+    "list": "問題一覧",
+    "menu_generate": "合成",
     "menu_register": "問題登録",
     "menu_list": "問題一覧",
     "menu_settings": "設定",
