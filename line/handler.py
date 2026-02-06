@@ -115,6 +115,16 @@ class LineHandler:
             )
             return
 
+        bulk_updates = self._parse_bulk_quiz_list(text)
+        if bulk_updates is not None:
+            if not self._apply_bulk_quiz_update(user_key, bulk_updates):
+                msg = self._text_message(self.texts.get("bulk_update_failed", ""))
+                self._reply(reply_token, [msg])
+                return
+            msg = self._text_message(self.texts.get("bulk_update_success", ""))
+            self._reply(reply_token, [msg])
+            return
+
         command = self.parser.parse(text)
         if text.startswith("font_"):
             value = text[len("font_") :].strip()
@@ -683,15 +693,20 @@ class LineHandler:
             "quiz_mode_note",
             "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
         )
+        answer_release = self.texts.get(
+            "answer_release_format",
+            f"解答発表は「@{self.texts.get('bot_name', '文字合成ボット')} "
+            "答え (問題番号)」と送ってください。",
+        )
         if old_word:
             return (
                 f"{number}問目に「{word}」をセットしました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
-                f"{dispatch_text}\n{mode_note}"
+                f"{dispatch_text}\n{answer_release}\n{mode_note}"
             )
         return (
             f"{number}問目に「{word}」をセットしました。\n"
-            f"{dispatch_text}\n{mode_note}"
+            f"{dispatch_text}\n{answer_release}\n{mode_note}"
         )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
@@ -708,6 +723,49 @@ class LineHandler:
         )
         lines.append(dispatch_list)
         return "\n".join(lines)
+
+    def _parse_bulk_quiz_list(self, text: str) -> Optional[dict]:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return None
+        if not lines[0].startswith("【問題一覧】"):
+            return None
+        entries = {}
+        for line in lines[1:]:
+            if line.startswith("グループで「@"):
+                continue
+            if "." not in line:
+                return {}
+            number_text, word = line.split(".", 1)
+            number_text = number_text.strip()
+            word = word.strip()
+            if not number_text.isdigit():
+                return {}
+            number = int(number_text)
+            if number < 1 or number > 10:
+                return {}
+            if number in entries:
+                return {}
+            entries[number] = word
+        if not entries:
+            return {}
+        return entries
+
+    def _apply_bulk_quiz_update(self, user_key: str, entries: dict) -> bool:
+        unset_label = self.texts.get("quiz_unset", "未設定")
+        for number in range(1, 11):
+            if number not in entries:
+                return False
+            word = entries[number]
+            if word == unset_label:
+                self.quiz_store.delete_word(user_key, number)
+                continue
+            if len(word) < 2 or len(word) > 8:
+                return False
+            if not self.parser._is_allowed_word(word):
+                return False
+            self.quiz_store.set_word(user_key, number, word)
+        return True
 
     def _is_bot_mentioned(self, message: dict) -> bool:
         mentionees = message.get("mention", {}).get("mentionees", []) if message else []

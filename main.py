@@ -87,6 +87,7 @@ def build_line_usage_text(bot_name: str) -> str:
         "・問題登録: 「1.熟語」のように送信（10問まで）\n"
         "・問題一覧: 「#問題一覧」\n"
         f"・出題: グループで「@{bot_name} + (問題番号)」\n"
+        f"・正解発表: グループで「@{bot_name} 答え (問題番号)」\n"
         "・正誤判定: グループで「@(出題者) + (問題番号).(解答)」\n"
         "\n"
         "【設定機能】\n"
@@ -208,6 +209,8 @@ line_texts = {
     "quiz_dispatch_list": f"グループで「@{line_bot_name} (問題番号)」と送ると出題されます。",
     "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
     "answer_release_format": f"解答発表は「@{line_bot_name} 答え (問題番号)」と送ってください。",
+    "bulk_update_success": "問題一覧を更新しました。",
+    "bulk_update_failed": "問題一覧の形式が正しくありません。",
     "quiz_unset": "未設定",
     "generate_failed": "画像の生成に失敗しました。",
     "answer_correct": "正解",

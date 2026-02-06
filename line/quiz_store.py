@@ -53,6 +53,13 @@ class SqliteQuizStore:
             ).fetchone()
         return row["word"] if row else ""
 
+    def delete_word(self, user_id: str, number: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM quiz_items WHERE user_id=? AND number=?",
+                (user_id, number),
+            )
+
     def list_words(self, user_id: str) -> dict:
         with self._connect() as conn:
             rows = conn.execute(
@@ -112,6 +119,16 @@ class FirestoreQuizStore:
             return ""
         data = doc.to_dict() or {}
         return data.get("word", "")
+
+    def delete_word(self, user_id: str, number: int) -> None:
+        doc_ref = (
+            self._client_or_create()
+            .collection(self.collection)
+            .document(user_id)
+            .collection("items")
+            .document(str(number))
+        )
+        doc_ref.delete()
 
     def list_words(self, user_id: str) -> dict:
         col_ref = (
