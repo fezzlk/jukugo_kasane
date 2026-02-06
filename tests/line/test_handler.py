@@ -1122,3 +1122,38 @@ def test_group_answer_correct(monkeypatch):
     assert message["text"].startswith("@Tester")
     assert message["text"].endswith("CORRECT")
     assert message["mention"]["mentionees"][0]["userId"] == "u1"
+
+
+def test_group_answer_unregistered(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@user 1.音楽性",
+                    "mention": {"mentionees": [{"userId": "u2"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "1問目は未登録です。"

@@ -532,6 +532,13 @@ class LineHandler:
                     return
                 _, number, word = quiz_status
                 stored_word = self.quiz_store.get_word(f"user:{target_id}", number)
+                if not stored_word:
+                    template = self.texts.get(
+                        "unregistered_template", "{number}問目は未登録です。"
+                    )
+                    msg = self._text_message(template.format(number=number))
+                    self._reply(reply_token, [msg])
+                    return
                 if stored_word and stored_word == word:
                     result = self.texts.get("answer_correct", "正解")
                 else:
