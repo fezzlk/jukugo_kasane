@@ -193,7 +193,10 @@ class LineHandler:
                 return
             try:
                 messages = []
-                messages.append(self._text_message(f"「{word}」の合成結果です。"))
+                synth_result = self.texts.get("synth_result", "「{word}」の合成結果です。")
+                messages.append(
+                    self._text_message(synth_result.format(word=word))
+                )
                 if len(word) >= 3:
                     q_path, a_path, u_path = self.generator.generate_images_with_union(
                         word, font_key
@@ -712,11 +715,12 @@ class LineHandler:
     def _build_quiz_list_text(self, user_key: str) -> str:
         items = self.quiz_store.list_words(user_key)
         unset_label = self.texts.get("quiz_unset", "未設定")
-        lines = ["【問題一覧】"]
+        title = self.texts.get("quiz_list_title", "【問題一覧】")
+        lines = [title]
         for number in range(1, 11):
             word = items.get(number, unset_label)
             lines.append(f"{number}. {word}")
-        dispatch_list = self.texts.get(
+        dispatch_list = self.texts.get("quiz_list_footer") or self.texts.get(
             "quiz_dispatch_list",
             f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
             "(問題番号)」と送ると出題されます。",
@@ -728,10 +732,14 @@ class LineHandler:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if not lines:
             return None
-        if not lines[0].startswith("【問題一覧】"):
+        title = self.texts.get("quiz_list_title", "【問題一覧】")
+        if not lines[0].startswith(title):
             return None
         entries = {}
         for line in lines[1:]:
+            footer = self.texts.get("quiz_list_footer")
+            if footer and line == footer:
+                continue
             if line.startswith("グループで「@"):
                 continue
             if "." not in line:
@@ -778,18 +786,8 @@ class LineHandler:
         self, user_id: str, result: str, display_name: str = ""
     ) -> dict:
         name = display_name or self.texts.get("mention_fallback", "ユーザー")
-        text = f"@{name} {result}"
-        if not user_id:
-            return {"type": "text", "text": result}
-        return {
-            "type": "text",
-            "text": text,
-            "mention": {
-                "mentionees": [
-                    {"index": 0, "length": len(name) + 1, "userId": user_id},
-                ]
-            },
-        }
+        template = self.texts.get("answer_template", "{name}さん、{result}です。")
+        return {"type": "text", "text": template.format(name=name, result=result)}
 
     def _strip_mention_text(self, text: str, mentionees: list) -> str:
         """Remove mention tokens from the message text."""

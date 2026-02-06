@@ -211,6 +211,10 @@ line_texts = {
     "answer_release_format": f"解答発表は「@{line_bot_name} 答え (問題番号)」と送ってください。",
     "bulk_update_success": "問題一覧を更新しました。",
     "bulk_update_failed": "問題一覧の形式が正しくありません。",
+    "answer_template": "{name}さん、{result}です。",
+    "quiz_list_title": "【問題一覧】",
+    "quiz_list_footer": f"グループで「@{line_bot_name} (問題番号)」と送ると出題されます。",
+    "synth_result": "「{word}」の合成結果です。",
     "quiz_unset": "未設定",
     "generate_failed": "画像の生成に失敗しました。",
     "answer_correct": "正解",
@@ -361,9 +365,29 @@ def generate(word):
     """メインフォーム"""
     try:
         font_key = request.args.get("font")
-        q_path, a_path = generator.generate_images(word, font_key)
         normalized_font_key = generator.normalize_font_key(font_key)
-        return render_template("generate.html", word=word, font=normalized_font_key)
+        if len(word) == 2:
+            q_path, a_path = generator.generate_images(word, font_key)
+            return render_template(
+                "generate.html",
+                word=word,
+                font=normalized_font_key,
+                show_answer=True,
+                show_union=False,
+                show_video=False,
+            )
+        q_path, a_path, u_path = generator.generate_images_with_union(word, font_key)
+        show_video = len(word) >= 3
+        if show_video:
+            generator.generate_union_video(word, font_key, fps=1)
+        return render_template(
+            "generate.html",
+            word=word,
+            font=normalized_font_key,
+            show_answer=False,
+            show_union=True,
+            show_video=show_video,
+        )
     except ValueError as e:
         return str(e), 400
     except Exception as e:
@@ -379,9 +403,29 @@ def form_query():
         return "jukugo is required", 400
     try:
         font_key = request.args.get("font")
-        q_path, a_path = generator.generate_images(jukugo, font_key)
         normalized_font_key = generator.normalize_font_key(font_key)
-        return render_template("generate.html", word=jukugo, font=normalized_font_key)
+        if len(jukugo) == 2:
+            q_path, a_path = generator.generate_images(jukugo, font_key)
+            return render_template(
+                "generate.html",
+                word=jukugo,
+                font=normalized_font_key,
+                show_answer=True,
+                show_union=False,
+                show_video=False,
+            )
+        q_path, a_path, u_path = generator.generate_images_with_union(jukugo, font_key)
+        show_video = len(jukugo) >= 3
+        if show_video:
+            generator.generate_union_video(jukugo, font_key, fps=1)
+        return render_template(
+            "generate.html",
+            word=jukugo,
+            font=normalized_font_key,
+            show_answer=False,
+            show_union=True,
+            show_video=show_video,
+        )
     except ValueError as e:
         return str(e), 400
     except Exception as e:

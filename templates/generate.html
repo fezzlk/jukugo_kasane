@@ -10,12 +10,34 @@
     <h2>{{ word }}</h2><font></span>
     <p>font: {{ font }}</p>
     <img src="/q/{{ word }}?font={{ font }}">
+    {% if show_union %}
+    <img src="/u/{{ word }}?font={{ font }}">
+    {% endif %}
+    {% if show_answer %}
     <img src="/a/{{ word }}?font={{ font }}">
+    {% endif %}
+    {% if show_video %}
+    <video controls poster="/p/{{ word }}?font={{ font }}">
+      <source src="/v/{{ word }}?font={{ font }}" type="video/mp4">
+    </video>
+    {% endif %}
     <p>
       <a href="/q/{{ word }}?font={{ font }}" download>問題画像をダウンロード</a>
     </p>
+    {% if show_union %}
+    <p>
+      <a href="/u/{{ word }}?font={{ font }}" download>和集合画像をダウンロード</a>
+    </p>
+    {% endif %}
+    {% if show_answer %}
     <p>
       <a href="/a/{{ word }}?font={{ font }}" download>解答画像をダウンロード</a>
     </p>
+    {% endif %}
+    {% if show_video %}
+    <p>
+      <a href="/v/{{ word }}?font={{ font }}" download>解答動画をダウンロード</a>
+    </p>
+    {% endif %}
   </body>
 </html>

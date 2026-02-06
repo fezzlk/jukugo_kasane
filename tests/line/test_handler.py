@@ -178,6 +178,10 @@ def _build_handler(
             "answer_release_format": "解答発表は「@文字合成ボット 答え (問題番号)」と送ってください。",
             "bulk_update_success": "BULK OK",
             "bulk_update_failed": "BULK NG",
+            "answer_template": "{name}さん、{result}です。",
+            "quiz_list_title": "【問題一覧】",
+            "quiz_list_footer": "グループで「@文字合成ボット (問題番号)」と送ると出題されます。",
+            "synth_result": "「{word}」の合成結果です。",
             "quiz_unset": "未設定",
             "generate_failed": "画像の生成に失敗しました。",
             "answer_correct": "CORRECT",
@@ -1134,9 +1138,7 @@ def test_group_answer_correct(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     message = captured["json"]["messages"][0]
-    assert message["text"].startswith("@Tester")
-    assert message["text"].endswith("CORRECT")
-    assert message["mention"]["mentionees"][0]["userId"] == "u1"
+    assert message["text"] == "Testerさん、CORRECTです。"
 
 
 def test_group_answer_unregistered(monkeypatch):

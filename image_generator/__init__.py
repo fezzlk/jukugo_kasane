@@ -248,7 +248,7 @@ class ImageGenerator:
     def generate_images(self, word: str, font_key: str = "default") -> tuple:
         """画像を生成して保存"""
         if len(word) != 2:
-            raise ValueError("お題は二文字にしてください。")
+            raise ValueError("お題は2文字のときのみ対応しています。")
 
         normalized_font_key = self.normalize_font_key(font_key)
         logger.info(f"画像生成開始: {word}, font_key: {normalized_font_key}")
