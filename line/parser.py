@@ -8,56 +8,64 @@ class LineCommandParser:
     def parse(self, text: str) -> dict:
         """Parse text into a command dictionary."""
         stripped = text.strip()
+        has_prefix = False
+        if stripped.startswith(("/", "#")):
+            stripped = stripped[1:].strip()
+            has_prefix = True
         help_keywords = self.keywords.get("help", [])
-        if stripped in help_keywords:
+        if has_prefix and stripped in help_keywords:
             return {"type": "help"}
 
-        setting = self._parse_setting(stripped)
+        setting = self._parse_setting(stripped) if has_prefix else {}
         if setting:
             return {"type": "setting", "setting": setting}
 
-        list_keyword = str(self.keywords.get("list", ""))
-        if list_keyword and stripped == list_keyword:
+        list_keyword = self.keywords.get("list", "")
+        list_candidates = (
+            list_keyword if isinstance(list_keyword, (list, tuple)) else [list_keyword]
+        )
+        list_candidates = [str(item) for item in list_candidates if str(item)]
+        if has_prefix and stripped in list_candidates:
             return {"type": "list"}
 
         menu_generate = str(self.keywords.get("menu_generate", ""))
-        if menu_generate and stripped == menu_generate:
+        if has_prefix and menu_generate and stripped == menu_generate:
             return {"type": "menu_generate"}
 
         menu_register = str(self.keywords.get("menu_register", ""))
-        if menu_register and stripped == menu_register:
+        if has_prefix and menu_register and stripped == menu_register:
             return {"type": "menu_register"}
 
         menu_list = str(self.keywords.get("menu_list", ""))
-        if menu_list and stripped == menu_list:
+        if has_prefix and menu_list and stripped == menu_list:
             return {"type": "menu_list"}
 
         menu_settings = str(self.keywords.get("menu_settings", ""))
-        if menu_settings and stripped == menu_settings:
+        if has_prefix and menu_settings and stripped == menu_settings:
             return {"type": "menu_settings"}
 
         menu_usage = str(self.keywords.get("menu_usage", ""))
-        if menu_usage and stripped == menu_usage:
+        if has_prefix and menu_usage and stripped == menu_usage:
             return {"type": "menu_usage"}
 
         menu_mode = str(self.keywords.get("menu_mode", ""))
-        if menu_mode and stripped == menu_mode:
+        if has_prefix and menu_mode and stripped == menu_mode:
             return {"type": "menu_mode"}
 
         menu_font = str(self.keywords.get("menu_font", ""))
-        if menu_font and stripped == menu_font:
+        if has_prefix and menu_font and stripped == menu_font:
             return {"type": "menu_font"}
 
         mode_common = str(self.keywords.get("mode_common", ""))
-        if mode_common and stripped == mode_common:
+        if has_prefix and mode_common and stripped == mode_common:
             return {"type": "mode_common"}
 
         mode_union = str(self.keywords.get("mode_union", ""))
-        if mode_union and stripped == mode_union:
+        if has_prefix and mode_union and stripped == mode_union:
             return {"type": "mode_union"}
 
         font_keyword = str(self.keywords.get("font", ""))
-        if stripped.startswith(font_keyword):
+        if has_prefix and stripped.startswith(font_keyword):
             _, _, font_value = stripped.partition(" ")
             if not font_value.strip():
                 return {"type": "menu_font"}

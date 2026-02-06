@@ -48,6 +48,7 @@ line_image_storage = os.getenv("LINE_IMAGE_STORAGE", "local").strip().lower()
 line_gcs_bucket = os.getenv("LINE_GCS_BUCKET", "")
 line_gcs_prefix = os.getenv("LINE_GCS_PREFIX", "line-images")
 line_bot_user_id = os.getenv("LINE_BOT_USER_ID", "").strip()
+line_bot_name = os.getenv("LINE_BOT_NAME", "").strip() or "文字合成ボット"
 line_quiz_db_path = os.getenv("LINE_QUIZ_DB_PATH", "line/quiz.db").strip()
 line_quiz_store_mode = os.getenv("LINE_QUIZ_STORE", "sqlite").strip().lower()
 line_firestore_project = os.getenv("LINE_FIRESTORE_PROJECT", "").strip()
@@ -76,7 +77,7 @@ def build_code_challenge(code_verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("utf-8")
 
 
-def build_line_usage_text() -> str:
+def build_line_usage_text(bot_name: str) -> str:
     return (
         "【合成機能】\n"
         "送信された文字（2〜8文字）を合成し、共通部分/和集合画像を生成します。\n"
@@ -84,13 +85,14 @@ def build_line_usage_text() -> str:
         "【出題機能】\n"
         "問題登録/一覧/出題/正誤判定を行います。\n"
         "・問題登録: 「1.熟語」のように送信（10問まで）\n"
-        "・問題一覧: 「問題一覧」と送信\n"
-        "・出題: グループで「@文字合成ボット + (問題番号)」\n"
+        "・問題一覧: 「#問題一覧」\n"
+        f"・出題: グループで「@{bot_name} + (問題番号)」\n"
         "・正誤判定: グループで「@(出題者) + (問題番号).(解答)」\n"
         "\n"
         "【設定機能】\n"
         "出題モード（共通部分/和集合）とフォントを変更できます。\n"
         "使い方: 「設定」ボタンから選択。\n"
+        "コマンド: 「#設定」「#問題一覧」「#合成」「#使い方」\n"
         "\n"
         "※ 画像生成には時間がかかる場合があります。"
     )
@@ -100,23 +102,23 @@ def build_line_quick_reply() -> dict:
     items = [
         {
             "type": "action",
-            "action": {"type": "message", "label": "合成", "text": "合成"},
+            "action": {"type": "message", "label": "合成", "text": "#合成"},
         },
         {
             "type": "action",
-            "action": {"type": "message", "label": "問題登録", "text": "問題登録"},
+            "action": {"type": "message", "label": "問題登録", "text": "#問題登録"},
         },
         {
             "type": "action",
-            "action": {"type": "message", "label": "問題一覧", "text": "問題一覧"},
+            "action": {"type": "message", "label": "問題一覧", "text": "#問題一覧"},
         },
         {
             "type": "action",
-            "action": {"type": "message", "label": "設定", "text": "設定"},
+            "action": {"type": "message", "label": "設定", "text": "#設定"},
         },
         {
             "type": "action",
-            "action": {"type": "message", "label": "使い方", "text": "使い方"},
+            "action": {"type": "message", "label": "使い方", "text": "#使い方"},
         },
     ]
     return {"items": items}
@@ -126,11 +128,11 @@ def build_line_settings_quick_reply() -> dict:
     items = [
         {
             "type": "action",
-            "action": {"type": "message", "label": "出題モード", "text": "出題モード"},
+            "action": {"type": "message", "label": "出題モード", "text": "#出題モード"},
         },
         {
             "type": "action",
-            "action": {"type": "message", "label": "フォント", "text": "フォント"},
+            "action": {"type": "message", "label": "フォント", "text": "#フォント"},
         },
     ]
     return {"items": items}
@@ -140,11 +142,11 @@ def build_line_mode_quick_reply() -> dict:
     items = [
         {
             "type": "action",
-            "action": {"type": "message", "label": "共通部分", "text": "共通部分"},
+            "action": {"type": "message", "label": "共通部分", "text": "#共通部分"},
         },
         {
             "type": "action",
-            "action": {"type": "message", "label": "和集合", "text": "和集合"},
+            "action": {"type": "message", "label": "和集合", "text": "#和集合"},
         },
     ]
     return {"items": items}
@@ -171,7 +173,7 @@ def build_line_font_quick_reply() -> dict:
                 "action": {
                     "type": "message",
                     "label": label,
-                    "text": f"フォント {font_key}",
+                    "text": f"#フォント {font_key}",
                 },
             }
         )
@@ -179,8 +181,8 @@ def build_line_font_quick_reply() -> dict:
 
 
 line_texts = {
-    "welcome_prefix": "文字合成ボットです。\n文字の共通部分と和集合を画像生成します\n\n",
-    "usage": build_line_usage_text(),
+    "welcome_prefix": f"{line_bot_name}です。\n文字の共通部分と和集合を画像生成します\n\n",
+    "usage": build_line_usage_text(line_bot_name),
     "generate_prompt": "合成する文字を送信してください。",
     "register_help": "「1.出題文字」のように送信すると出題用に文字を登録します。",
     "settings_prompt": "設定項目を選択してください。",
@@ -200,7 +202,11 @@ line_texts = {
     "mention_fallback": "ユーザー",
     "quiz_prompt_common": "何の共通部分？",
     "quiz_prompt_union": "何の和集合？",
-    "quiz_answer_template": "解答フォーマット: @{name} {number}.(解答) で回答してください。",
+    "quiz_answer_template": "【解答フォーマット】\n@{name} {number}.(解答)",
+    "bot_name": line_bot_name,
+    "quiz_format": f"@{line_bot_name} (問題番号)",
+    "quiz_dispatch_template": f"グループで「@{line_bot_name} {{number}}」と送ると出題されます。",
+    "quiz_dispatch_list": f"グループで「@{line_bot_name} (問題番号)」と送ると出題されます。",
     "quiz_unset": "未設定",
     "generate_failed": "画像の生成に失敗しました。",
     "answer_correct": "正解",

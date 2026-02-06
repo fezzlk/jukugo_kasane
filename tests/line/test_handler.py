@@ -9,15 +9,15 @@ from line.handler import LineHandler
 # - "ab" -> text + Q image + U image + A image (2-char flow)
 # - "abc" -> text + Q image + U image + video (3+ char flow)
 # - "font_mincho" -> updates font setting
-# - "help" -> usage text
-# - "menu_generate" -> generate prompt
-# - "menu_register" -> register format help
-# - "menu_list" -> quiz list output
-# - "menu_settings" -> settings quick reply
-# - "menu_mode" -> mode quick reply
-# - "mode_union" -> quiz_mode=union
-# - "menu_font" -> font quick reply
-# - "menu_usage" -> usage text
+# - "#help" -> usage text
+# - "#menu_generate" -> generate prompt
+# - "#menu_register" -> register format help
+# - "#menu_list" -> quiz list output
+# - "#menu_settings" -> settings quick reply
+# - "#menu_mode" -> mode quick reply
+# - "#mode_union" -> quiz_mode=union
+# - "#menu_font" -> font quick reply
+# - "#menu_usage" -> usage text
 # - "abc" (len!=2..8) -> NOT TWO CHARS
 # - "a!" -> INVALID WORD
 # - "1.音楽性" -> register quiz item
@@ -166,6 +166,10 @@ def _build_handler(
             "quiz_prompt_common": "COMMON?",
             "quiz_prompt_union": "UNION?",
             "quiz_answer_template": "ANSWER @{name} {number}.(解答)",
+            "bot_name": "文字合成ボット",
+            "quiz_format": "@文字合成ボット (問題番号)",
+            "quiz_dispatch_template": "グループで「@文字合成ボット {number}」と送ると出題されます。",
+            "quiz_dispatch_list": "グループで「@文字合成ボット (問題番号)」と送ると出題されます。",
             "quiz_unset": "未設定",
             "generate_failed": "画像の生成に失敗しました。",
             "answer_correct": "CORRECT",
@@ -365,7 +369,7 @@ def test_setting_command_updates_font(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "set font=mincho"},
+                "message": {"type": "text", "text": "#set font=mincho"},
                 "source": {"userId": "u1"},
             }
         ]
@@ -397,7 +401,7 @@ def test_help_command_returns_usage(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "help"},
+                "message": {"type": "text", "text": "#help"},
                 "source": {"userId": "u1"},
             }
         ]
@@ -428,8 +432,8 @@ def test_menu_generate_returns_prompt(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_generate"},
-            "source": {"userId": "u1"},
+                "message": {"type": "text", "text": "#menu_generate"},
+                "source": {"userId": "u1"},
             }
         ]
     }
@@ -459,7 +463,7 @@ def test_menu_register_returns_help(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_register"},
+                "message": {"type": "text", "text": "#menu_register"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -491,7 +495,7 @@ def test_menu_list_returns_quiz_list(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_list"},
+                "message": {"type": "text", "text": "#menu_list"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -530,7 +534,7 @@ def test_menu_settings_returns_settings_quick_reply(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_settings"},
+                "message": {"type": "text", "text": "#menu_settings"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -569,7 +573,7 @@ def test_menu_mode_returns_mode_quick_reply(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_mode"},
+                "message": {"type": "text", "text": "#menu_mode"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -608,7 +612,7 @@ def test_menu_font_returns_font_quick_reply(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_font"},
+                "message": {"type": "text", "text": "#menu_font"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -641,7 +645,7 @@ def test_mode_union_sets_setting(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "mode_union"},
+                "message": {"type": "text", "text": "#mode_union"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -673,7 +677,7 @@ def test_menu_usage_returns_usage(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "menu_usage"},
+                "message": {"type": "text", "text": "#menu_usage"},
                 "source": {"type": "user", "userId": "u1"},
             }
         ]
@@ -704,7 +708,7 @@ def test_invalid_font_replies_with_error(monkeypatch):
             {
                 "type": "message",
                 "replyToken": "rt",
-                "message": {"type": "text", "text": "font unknown"},
+                "message": {"type": "text", "text": "#font unknown"},
                 "source": {"userId": "u1"},
             }
         ]
@@ -966,7 +970,10 @@ def test_group_bot_mention_invalid_number(monkeypatch):
 
     text, status = handler.handle_callback(body, signature)
     assert status == 200
-    assert captured["json"]["messages"][0]["text"] == "INVALID NUMBER"
+    assert (
+        captured["json"]["messages"][0]["text"]
+        == "出題時は「@文字合成ボット (問題番号)」と送ってください。"
+    )
 
 
 def test_group_bot_mention_unregistered(monkeypatch):

@@ -448,7 +448,9 @@ class LineHandler:
             )
             number = int(number_text) if number_text.isdigit() else 0
             if number < 1 or number > 10:
-                msg = self._text_message(self.texts.get("invalid_number", ""))
+                bot_name = self.texts.get("bot_name", "文字合成ボット")
+                quiz_format = self.texts.get("quiz_format", f"@{bot_name} (問題番号)")
+                msg = self._text_message(f"出題時は「{quiz_format}」と送ってください。")
                 self._reply(reply_token, [msg])
                 return
             stored_word = self.quiz_store.get_word(sender_key, number)
@@ -465,10 +467,12 @@ class LineHandler:
             display_name = self.profile_client.get_display_name(
                 event.get("source", {}), sender_id
             )
-            display_name = display_name or self.texts.get("mention_fallback", "ユーザー")
+            display_name = display_name or self.texts.get(
+                "mention_fallback", "ユーザー"
+            )
             answer_template = self.texts.get(
                 "quiz_answer_template",
-                "解答フォーマット: @{name} {number}.(解答) で回答してください。",
+                "【解答フォーマット】\n@{name} {number}.(解答)",
             )
             answer_text = answer_template.format(name=display_name, number=number)
             try:
@@ -607,25 +611,33 @@ class LineHandler:
         return ("ok", number, word)
 
     def _build_set_reply_text(self, number: int, word: str, old_word: str) -> str:
+        dispatch_template = self.texts.get(
+            "quiz_dispatch_template",
+            f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
+            "{number}」と送ると出題されます。",
+        )
+        dispatch_text = dispatch_template.format(number=number)
         if old_word:
             return (
-                f"第{number}問目に「{word}」をセットしました。"
+                f"{number}問目に「{word}」をセットしました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
-                f"出題: グループで「@文字合成ボット {number}」と送ると出題されます。"
+                f"{dispatch_text}"
             )
-        return (
-            f"第{number}問目に「{word}」をセットしました。\n"
-            f"出題: グループで「@文字合成ボット {number}」と送ると出題されます。"
-        )
+        return f"{number}問目に「{word}」をセットしました。\n{dispatch_text}"
 
     def _build_quiz_list_text(self, user_key: str) -> str:
         items = self.quiz_store.list_words(user_key)
         unset_label = self.texts.get("quiz_unset", "未設定")
-        lines = ["問題一覧"]
+        lines = ["【問題一覧】"]
         for number in range(1, 11):
             word = items.get(number, unset_label)
             lines.append(f"{number}. {word}")
-        lines.append("出題: グループで「@文字合成ボット (問題番号)」と送ると出題されます。")
+        dispatch_list = self.texts.get(
+            "quiz_dispatch_list",
+            f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
+            "(問題番号)」と送ると出題されます。",
+        )
+        lines.append(dispatch_list)
         return "\n".join(lines)
 
     def _is_bot_mentioned(self, message: dict) -> bool:
