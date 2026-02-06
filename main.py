@@ -91,8 +91,7 @@ def build_line_usage_text(bot_name: str) -> str:
         "\n"
         "【設定機能】\n"
         "出題モード（共通部分/和集合）とフォントを変更できます。\n"
-        "使い方: 「設定」ボタンから選択。\n"
-        "コマンド: 「#設定」「#問題一覧」「#合成」「#使い方」\n"
+        "設定: 「#設定」と送信。\n"
         "\n"
         "※ 画像生成には時間がかかる場合があります。"
     )
@@ -207,6 +206,7 @@ line_texts = {
     "quiz_format": f"@{line_bot_name} (問題番号)",
     "quiz_dispatch_template": f"グループで「@{line_bot_name} {{number}}」と送ると出題されます。",
     "quiz_dispatch_list": f"グループで「@{line_bot_name} (問題番号)」と送ると出題されます。",
+    "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
     "quiz_unset": "未設定",
     "generate_failed": "画像の生成に失敗しました。",
     "answer_correct": "正解",

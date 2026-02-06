@@ -170,6 +170,7 @@ def _build_handler(
             "quiz_format": "@文字合成ボット (問題番号)",
             "quiz_dispatch_template": "グループで「@文字合成ボット {number}」と送ると出題されます。",
             "quiz_dispatch_list": "グループで「@文字合成ボット (問題番号)」と送ると出題されます。",
+            "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
             "quiz_unset": "未設定",
             "generate_failed": "画像の生成に失敗しました。",
             "answer_correct": "CORRECT",

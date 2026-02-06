@@ -19,6 +19,7 @@ WHITE = (255, 255, 255, 255)
 PURPLE = (70, 20, 190, 255)
 BLUE = (70, 65, 225, 255)
 RED = (230, 70, 70, 255)
+RED_SOFT = (230, 70, 70, 140)
 
 class ImageGenerator:
     """画像生成クラス"""
@@ -219,16 +220,20 @@ class ImageGenerator:
         next_index = step_index
         for x, y in product(*map(range, (1024, 1024))):
             prefix_all_black = True
+            prefix_any_black = False
             for idx in range(prefix_end):
-                if pixels[idx][x, y] != BLACK:
+                if pixels[idx][x, y] == BLACK:
+                    prefix_any_black = True
+                else:
                     prefix_all_black = False
-                    break
             next_black = pixels[next_index][x, y] == BLACK
 
             if prefix_all_black and not next_black:
                 frame_pix[x, y] = RED
             elif prefix_all_black and next_black:
                 frame_pix[x, y] = PURPLE
+            elif prefix_any_black and not next_black:
+                frame_pix[x, y] = RED_SOFT
             elif next_black:
                 frame_pix[x, y] = BLUE
             else:

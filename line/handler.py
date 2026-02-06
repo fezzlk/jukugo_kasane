@@ -617,13 +617,20 @@ class LineHandler:
             "{number}」と送ると出題されます。",
         )
         dispatch_text = dispatch_template.format(number=number)
+        mode_note = self.texts.get(
+            "quiz_mode_note",
+            "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
+        )
         if old_word:
             return (
                 f"{number}問目に「{word}」をセットしました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
-                f"{dispatch_text}"
+                f"{dispatch_text}\n{mode_note}"
             )
-        return f"{number}問目に「{word}」をセットしました。\n{dispatch_text}"
+        return (
+            f"{number}問目に「{word}」をセットしました。\n"
+            f"{dispatch_text}\n{mode_note}"
+        )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
         items = self.quiz_store.list_words(user_key)
