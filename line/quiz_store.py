@@ -148,3 +148,64 @@ class FirestoreQuizStore:
             if word:
                 result[number] = word
         return result
+
+
+class DatastoreQuizStore:
+    def __init__(self, project_id: str, logger, kind: str = "line_quiz_items"):
+        self.project_id = project_id
+        self.logger = logger
+        self.kind = kind
+        self._client = None
+
+    def _client_or_create(self):
+        if self._client is None:
+            from google.cloud import datastore
+
+            if self.project_id:
+                self._client = datastore.Client(project=self.project_id)
+            else:
+                self._client = datastore.Client()
+        return self._client
+
+    def _key(self, user_id: str, number: int):
+        key_name = f"{user_id}:{number}"
+        return self._client_or_create().key(self.kind, key_name)
+
+    def set_word(self, user_id: str, number: int, word: str) -> str:
+        old_word = self.get_word(user_id, number)
+        from google.cloud import datastore
+
+        entity = datastore.Entity(key=self._key(user_id, number))
+        entity.update(
+            {
+                "user_id": user_id,
+                "number": number,
+                "word": word,
+                "updated_at": datetime.utcnow(),
+            }
+        )
+        self._client_or_create().put(entity)
+        return old_word or ""
+
+    def get_word(self, user_id: str, number: int) -> str:
+        entity = self._client_or_create().get(self._key(user_id, number))
+        if not entity:
+            return ""
+        return entity.get("word", "") or ""
+
+    def delete_word(self, user_id: str, number: int) -> None:
+        self._client_or_create().delete(self._key(user_id, number))
+
+    def list_words(self, user_id: str) -> dict:
+        query = self._client_or_create().query(kind=self.kind)
+        query.add_filter("user_id", "=", user_id)
+        result = {}
+        for entity in query.fetch():
+            try:
+                number = int(entity.get("number", 0))
+            except (TypeError, ValueError):
+                continue
+            word = entity.get("word", "")
+            if word:
+                result[number] = word
+        return result
