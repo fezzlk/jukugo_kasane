@@ -24,7 +24,7 @@ from line import store as line_store
 from line.handler import LineHandler
 from line.image_store import GcsImageStore, LocalImageStore
 from line.profile import LineProfileClient
-from line.quiz_store import DatastoreQuizStore, FirestoreQuizStore, SqliteQuizStore
+from line.quiz_store import DatastoreQuizStore, SqliteQuizStore
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "")
@@ -246,9 +246,7 @@ if line_image_storage == "gcs":
 else:
     line_image_store = LocalImageStore(server_fqdn)
 
-if line_quiz_store_mode == "firestore":
-    line_quiz_store = FirestoreQuizStore(line_firestore_project, logger)
-elif line_quiz_store_mode == "datastore":
+if line_quiz_store_mode == "datastore":
     line_quiz_store = DatastoreQuizStore(line_firestore_project, logger)
 else:
     line_quiz_store = SqliteQuizStore(line_quiz_db_path, logger)

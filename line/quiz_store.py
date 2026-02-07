@@ -20,38 +20,59 @@ class SqliteQuizStore:
                     user_id TEXT NOT NULL,
                     number INTEGER NOT NULL,
                     word TEXT NOT NULL,
+                    quiz_mode TEXT NOT NULL DEFAULT 'intersection',
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (user_id, number)
                 )
                 """
             )
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(quiz_items)").fetchall()
+            }
+            if "quiz_mode" not in columns:
+                conn.execute(
+                    "ALTER TABLE quiz_items ADD COLUMN quiz_mode TEXT NOT NULL DEFAULT 'intersection'"
+                )
 
     def _connect(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def set_word(self, user_id: str, number: int, word: str) -> str:
+    def set_word(
+        self, user_id: str, number: int, word: str, quiz_mode: str = "intersection"
+    ) -> str:
         old_word = self.get_word(user_id, number)
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO quiz_items (user_id, number, word, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO quiz_items (user_id, number, word, quiz_mode, updated_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, number)
-                DO UPDATE SET word=excluded.word, updated_at=excluded.updated_at
+                DO UPDATE SET word=excluded.word, quiz_mode=excluded.quiz_mode,
+                updated_at=excluded.updated_at
                 """,
-                (user_id, number, word, self._now()),
+                (user_id, number, word, quiz_mode, self._now()),
             )
         return old_word or ""
 
     def get_word(self, user_id: str, number: int) -> str:
+        item = self.get_quiz_item(user_id, number)
+        return item["word"] if item else ""
+
+    def get_quiz_item(self, user_id: str, number: int) -> dict:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT word FROM quiz_items WHERE user_id=? AND number=?",
+                "SELECT word, quiz_mode FROM quiz_items WHERE user_id=? AND number=?",
                 (user_id, number),
             ).fetchone()
-        return row["word"] if row else ""
+        if not row:
+            return {}
+        return {
+            "word": row["word"],
+            "quiz_mode": row["quiz_mode"] or "intersection",
+        }
 
     def delete_word(self, user_id: str, number: int) -> None:
         with self._connect() as conn:
@@ -75,81 +96,6 @@ class SqliteQuizStore:
         return datetime.utcnow().isoformat() + "Z"
 
 
-class FirestoreQuizStore:
-    def __init__(self, project_id: str, logger, collection: str = "line_quiz_users"):
-        self.project_id = project_id
-        self.logger = logger
-        self.collection = collection
-        self._client = None
-
-    def _client_or_create(self):
-        if self._client is None:
-            from google.cloud import firestore
-
-            if self.project_id:
-                self._client = firestore.Client(project=self.project_id)
-            else:
-                self._client = firestore.Client()
-        return self._client
-
-    def set_word(self, user_id: str, number: int, word: str) -> str:
-        old_word = self.get_word(user_id, number)
-        doc_ref = (
-            self._client_or_create()
-            .collection(self.collection)
-            .document(user_id)
-            .collection("items")
-            .document(str(number))
-        )
-        doc_ref.set(
-            {"word": word, "updated_at": datetime.utcnow()},
-        )
-        return old_word or ""
-
-    def get_word(self, user_id: str, number: int) -> str:
-        doc_ref = (
-            self._client_or_create()
-            .collection(self.collection)
-            .document(user_id)
-            .collection("items")
-            .document(str(number))
-        )
-        doc = doc_ref.get()
-        if not doc.exists:
-            return ""
-        data = doc.to_dict() or {}
-        return data.get("word", "")
-
-    def delete_word(self, user_id: str, number: int) -> None:
-        doc_ref = (
-            self._client_or_create()
-            .collection(self.collection)
-            .document(user_id)
-            .collection("items")
-            .document(str(number))
-        )
-        doc_ref.delete()
-
-    def list_words(self, user_id: str) -> dict:
-        col_ref = (
-            self._client_or_create()
-            .collection(self.collection)
-            .document(user_id)
-            .collection("items")
-        )
-        result = {}
-        for doc in col_ref.stream():
-            try:
-                number = int(doc.id)
-            except ValueError:
-                continue
-            data = doc.to_dict() or {}
-            word = data.get("word", "")
-            if word:
-                result[number] = word
-        return result
-
-
 class DatastoreQuizStore:
     def __init__(self, project_id: str, logger, kind: str = "line_quiz_items"):
         self.project_id = project_id
@@ -171,7 +117,9 @@ class DatastoreQuizStore:
         key_name = f"{user_id}:{number}"
         return self._client_or_create().key(self.kind, key_name)
 
-    def set_word(self, user_id: str, number: int, word: str) -> str:
+    def set_word(
+        self, user_id: str, number: int, word: str, quiz_mode: str = "intersection"
+    ) -> str:
         old_word = self.get_word(user_id, number)
         from google.cloud import datastore
 
@@ -181,6 +129,7 @@ class DatastoreQuizStore:
                 "user_id": user_id,
                 "number": number,
                 "word": word,
+                "quiz_mode": quiz_mode,
                 "updated_at": datetime.utcnow(),
             }
         )
@@ -188,10 +137,17 @@ class DatastoreQuizStore:
         return old_word or ""
 
     def get_word(self, user_id: str, number: int) -> str:
+        item = self.get_quiz_item(user_id, number)
+        return item["word"] if item else ""
+
+    def get_quiz_item(self, user_id: str, number: int) -> dict:
         entity = self._client_or_create().get(self._key(user_id, number))
         if not entity:
-            return ""
-        return entity.get("word", "") or ""
+            return {}
+        return {
+            "word": entity.get("word", "") or "",
+            "quiz_mode": entity.get("quiz_mode", "intersection") or "intersection",
+        }
 
     def delete_word(self, user_id: str, number: int) -> None:
         self._client_or_create().delete(self._key(user_id, number))

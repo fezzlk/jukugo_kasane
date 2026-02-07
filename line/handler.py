@@ -368,8 +368,12 @@ class LineHandler:
             self._reply(reply_token, [msg])
             return True
         if status == "ok":
-            old_word = self.quiz_store.set_word(user_key, number, word)
-            msg = self._text_message(self._build_set_reply_text(number, word, old_word))
+            user_settings = self._get_user_settings(user_key)
+            quiz_mode = user_settings.get("quiz_mode", "intersection")
+            old_word = self.quiz_store.set_word(user_key, number, word, quiz_mode)
+            msg = self._text_message(
+                self._build_set_reply_text(number, word, old_word, quiz_mode)
+            )
             self._reply(reply_token, [msg])
             return True
         return False
@@ -528,7 +532,8 @@ class LineHandler:
                 msg = self._text_message(f"出題時は「{quiz_format}」と送ってください。")
                 self._reply(reply_token, [msg])
                 return
-            stored_word = self.quiz_store.get_word(sender_key, number)
+            stored_item = self.quiz_store.get_quiz_item(sender_key, number)
+            stored_word = stored_item.get("word", "")
             if not stored_word:
                 template = self.texts.get(
                     "unregistered_template", "{number}問目は未登録です。"
@@ -538,7 +543,7 @@ class LineHandler:
                 return
             sender_settings = self._get_user_settings(sender_key)
             sender_font = sender_settings.get("font", font_key)
-            quiz_mode = sender_settings.get("quiz_mode", "intersection")
+            quiz_mode = stored_item.get("quiz_mode", "intersection")
             display_name = self.profile_client.get_display_name(
                 event.get("source", {}), sender_id
             )
@@ -685,31 +690,30 @@ class LineHandler:
             return ("invalid_word", number, word)
         return ("ok", number, word)
 
-    def _build_set_reply_text(self, number: int, word: str, old_word: str) -> str:
+    def _build_set_reply_text(
+        self, number: int, word: str, old_word: str, quiz_mode: str
+    ) -> str:
         dispatch_template = self.texts.get(
             "quiz_dispatch_template",
             f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
             "{number}」と送ると出題されます。",
         )
         dispatch_text = dispatch_template.format(number=number)
-        mode_note = self.texts.get(
-            "quiz_mode_note",
-            "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
-        )
         answer_release = self.texts.get(
             "answer_release_format",
             f"解答発表は「@{self.texts.get('bot_name', '文字合成ボット')} "
             "答え (問題番号)」と送ってください。",
         )
+        mode_label = self._quiz_mode_label(quiz_mode)
         if old_word:
             return (
-                f"{number}問目に「{word}」をセットしました。"
+                f"{number}問目に「{word}」を{mode_label}モードで登録しました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
-                f"{dispatch_text}\n{answer_release}\n{mode_note}"
+                f"{dispatch_text}\n{answer_release}"
             )
         return (
-            f"{number}問目に「{word}」をセットしました。\n"
-            f"{dispatch_text}\n{answer_release}\n{mode_note}"
+            f"{number}問目に「{word}」を{mode_label}モードで登録しました。\n"
+            f"{dispatch_text}\n{answer_release}"
         )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
@@ -761,6 +765,8 @@ class LineHandler:
 
     def _apply_bulk_quiz_update(self, user_key: str, entries: dict) -> bool:
         unset_label = self.texts.get("quiz_unset", "未設定")
+        user_settings = self._get_user_settings(user_key)
+        quiz_mode = user_settings.get("quiz_mode", "intersection")
         for number in range(1, 11):
             if number not in entries:
                 return False
@@ -772,8 +778,11 @@ class LineHandler:
                 return False
             if not self.parser._is_allowed_word(word):
                 return False
-            self.quiz_store.set_word(user_key, number, word)
+            self.quiz_store.set_word(user_key, number, word, quiz_mode)
         return True
+
+    def _quiz_mode_label(self, quiz_mode: str) -> str:
+        return "和集合" if quiz_mode == "union" else "共通部分"
 
     def _is_bot_mentioned(self, message: dict) -> bool:
         mentionees = message.get("mention", {}).get("mentionees", []) if message else []

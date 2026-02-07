@@ -119,20 +119,33 @@ def _build_handler(
         def __init__(self):
             self.data = {}
 
-        def set_word(self, user_id, number, word):
+        def set_word(self, user_id, number, word, quiz_mode="intersection"):
             old_word = self.get_word(user_id, number)
-            self.data.setdefault(user_id, {})[number] = word
+            self.data.setdefault(user_id, {})[number] = {
+                "word": word,
+                "quiz_mode": quiz_mode,
+            }
             return old_word
 
         def get_word(self, user_id, number):
-            return self.data.get(user_id, {}).get(number, "")
+            item = self.data.get(user_id, {}).get(number)
+            return item.get("word", "") if item else ""
+
+        def get_quiz_item(self, user_id, number):
+            item = self.data.get(user_id, {}).get(number)
+            if not item:
+                return {}
+            return dict(item)
 
         def delete_word(self, user_id, number):
             if user_id in self.data:
                 self.data[user_id].pop(number, None)
 
         def list_words(self, user_id):
-            return dict(self.data.get(user_id, {}))
+            result = {}
+            for number, item in self.data.get(user_id, {}).items():
+                result[number] = item.get("word", "")
+            return result
 
     class DummyProfileClient:
         def get_display_name(self, source, user_id):
@@ -823,7 +836,8 @@ def test_quiz_register_with_three_chars(monkeypatch):
 
     text, status = handler.handle_callback(body, signature)
     assert status == 200
-    assert handler.quiz_store.data["user:u1"][1] == "音楽性"
+    assert handler.quiz_store.data["user:u1"][1]["word"] == "音楽性"
+    assert handler.quiz_store.data["user:u1"][1]["quiz_mode"] == "intersection"
 
 
 def test_quiz_register_invalid_word(monkeypatch):
@@ -1037,7 +1051,7 @@ def test_group_bot_mention_union_image(monkeypatch):
 
     store.data["user:u1"] = {"quiz_mode": "union"}
     handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
-    handler.quiz_store.set_word("user:u1", 1, "ab")
+    handler.quiz_store.set_word("user:u1", 1, "ab", "union")
     payload = {
         "events": [
             {
@@ -1117,7 +1131,7 @@ def test_group_answer_correct(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
-    handler.quiz_store.set_word("user:u2", 1, "音楽性")
+    handler.quiz_store.set_word("user:u2", 1, "音楽性", "intersection")
     payload = {
         "events": [
             {
@@ -1227,7 +1241,7 @@ def test_group_answer_release_two_chars(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
-    handler.quiz_store.set_word("user:u1", 1, "ab")
+    handler.quiz_store.set_word("user:u1", 1, "ab", "intersection")
     payload = {
         "events": [
             {
@@ -1265,7 +1279,7 @@ def test_group_answer_release_video(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
-    handler.quiz_store.set_word("user:u1", 1, "abcd")
+    handler.quiz_store.set_word("user:u1", 1, "abcd", "intersection")
     payload = {
         "events": [
             {
@@ -1303,7 +1317,7 @@ def test_bulk_quiz_list_update(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
-    handler.quiz_store.set_word("user:u1", 1, "ab")
+    handler.quiz_store.set_word("user:u1", 1, "ab", "intersection")
     payload = {
         "events": [
             {
