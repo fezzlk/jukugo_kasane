@@ -139,6 +139,20 @@ class LineHandler:
                 msg = self._text_message(self.texts.get("quiz_prompt_help", ""))
                 self._reply(reply_token, [msg])
                 return
+            if "@" in value:
+                msg = self._text_message(
+                    self.texts.get(
+                        "quiz_prompt_invalid_char", "問題文に@は使用できません。"
+                    )
+                )
+                self._reply(reply_token, [msg])
+                return
+            if len(value) > 20:
+                msg = self._text_message(
+                    self.texts.get("quiz_prompt_too_long", "問題文は20文字以内で指定してください。")
+                )
+                self._reply(reply_token, [msg])
+                return
             user_settings["quiz_prompt"] = value
             if not self._save_user_settings(user_key, user_settings):
                 self._reply(
@@ -172,8 +186,11 @@ class LineHandler:
                     [self._text_message(self.texts.get("save_failed", ""))],
                 )
                 return
+            summary = self._build_settings_summary(user_settings)
             msg = self._text_message(
-                self.texts.get("settings_updated", "").format(settings=user_settings),
+                self.texts.get("settings_updated", "").format(settings=user_settings)
+                + "\n"
+                + summary,
                 include_quick_reply=True,
             )
             self._reply(reply_token, [msg])
@@ -762,7 +779,11 @@ class LineHandler:
                 lines.append(f"{number}. {word}")
                 continue
             mode_label = self._quiz_mode_label(item.get("quiz_mode", "intersection"))
-            lines.append(f"{number}. {word}({mode_label})")
+            prompt = item.get("quiz_prompt", "")
+            if prompt:
+                lines.append(f"{number}. {word}({mode_label}) @{prompt}")
+            else:
+                lines.append(f"{number}. {word}({mode_label})")
         dispatch_list = self.texts.get("quiz_list_footer") or self.texts.get(
             "quiz_dispatch_list",
             f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
@@ -797,10 +818,11 @@ class LineHandler:
                 return {}
             if number in entries:
                 return {}
-            word_text, mode_label = self._split_word_with_mode(word)
+            word_text, mode_label, prompt_text = self._split_word_with_mode(word)
             entries[number] = {
                 "word": word_text,
                 "quiz_mode": self._parse_mode_label(mode_label),
+                "quiz_prompt": prompt_text,
             }
         if not entries:
             return {}
@@ -819,18 +841,40 @@ class LineHandler:
             entry_mode = (
                 entry.get("quiz_mode") if isinstance(entry, dict) else None
             ) or quiz_mode
+            entry_prompt = (
+                entry.get("quiz_prompt") if isinstance(entry, dict) else None
+            ) or quiz_prompt
             if word == unset_label:
                 self.quiz_store.delete_word(user_key, number)
                 continue
             if len(word) < 2 or len(word) > 8:
                 return False
+            if entry_prompt and "@" in entry_prompt:
+                return False
+            if entry_prompt and len(entry_prompt) > 20:
+                return False
             if not self.parser._is_allowed_word(word):
                 return False
-            self.quiz_store.set_word(user_key, number, word, entry_mode, quiz_prompt)
+            self.quiz_store.set_word(
+                user_key, number, word, entry_mode, entry_prompt
+            )
         return True
 
     def _quiz_mode_label(self, quiz_mode: str) -> str:
         return "和集合" if quiz_mode == "union" else "共通部分"
+
+    def _build_settings_summary(self, user_settings: dict) -> str:
+        quiz_mode = user_settings.get("quiz_mode", "intersection")
+        font_key = user_settings.get("font", self.default_font_key)
+        quiz_prompt = user_settings.get("quiz_prompt", "")
+        unset_label = self.texts.get("quiz_unset", "未設定")
+        prompt_text = quiz_prompt if quiz_prompt else unset_label
+        return (
+            "【現在の設定】\n"
+            f"出題モード: {self._quiz_mode_label(quiz_mode)}\n"
+            f"フォント: {font_key}\n"
+            f"問題文: {prompt_text}"
+        )
 
     def _resolve_quiz_prompt(self, quiz_mode: str, quiz_prompt: str) -> str:
         if quiz_prompt:
@@ -847,10 +891,14 @@ class LineHandler:
         return "intersection"
 
     def _split_word_with_mode(self, word: str) -> tuple:
-        match = re.match(r"^(.*?)(?:\(([^()]*)\))?$", word)
+        match = re.match(r"^(.*?)(?:\(([^()]*)\))?(?:\s*@(.+))?$", word)
         if not match:
-            return word, ""
-        return match.group(1).strip(), (match.group(2) or "").strip()
+            return word, "", ""
+        return (
+            match.group(1).strip(),
+            (match.group(2) or "").strip(),
+            (match.group(3) or "").strip(),
+        )
 
     def _is_bot_mentioned(self, message: dict) -> bool:
         mentionees = message.get("mention", {}).get("mentionees", []) if message else []
