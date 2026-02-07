@@ -133,6 +133,24 @@ class LineHandler:
                 command = {"type": "font", "value": value}
         if self._handle_menu_commands(command, user_key, source_type, reply_token):
             return
+        if command["type"] == "quiz_prompt":
+            value = command.get("value", "")
+            if not value:
+                msg = self._text_message(self.texts.get("quiz_prompt_help", ""))
+                self._reply(reply_token, [msg])
+                return
+            user_settings["quiz_prompt"] = value
+            if not self._save_user_settings(user_key, user_settings):
+                self._reply(
+                    reply_token,
+                    [self._text_message(self.texts.get("save_failed", ""))],
+                )
+                return
+            msg = self._text_message(
+                self.texts.get("quiz_prompt_set", "").format(prompt=value)
+            )
+            self._reply(reply_token, [msg])
+            return
         if self._handle_user_quiz_registration(text, user_key, reply_token):
             return
         if command["type"] == "both":
@@ -279,6 +297,10 @@ class LineHandler:
                     message["quickReply"] = settings_quick
             self._reply(reply_token, [message])
             return True
+        if command["type"] == "menu_prompt":
+            message = self._text_message(self.texts.get("quiz_prompt_help", ""))
+            self._reply(reply_token, [message])
+            return True
         if command["type"] == "menu_mode":
             message = self._text_message(self.texts.get("mode_prompt", ""))
             if self.mode_quick_reply_builder:
@@ -371,7 +393,10 @@ class LineHandler:
         if status == "ok":
             user_settings = self._get_user_settings(user_key)
             quiz_mode = user_settings.get("quiz_mode", "intersection")
-            old_word = self.quiz_store.set_word(user_key, number, word, quiz_mode)
+            quiz_prompt = user_settings.get("quiz_prompt", "")
+            old_word = self.quiz_store.set_word(
+                user_key, number, word, quiz_mode, quiz_prompt
+            )
             msg = self._text_message(
                 self._build_set_reply_text(number, word, old_word, quiz_mode)
             )
@@ -545,6 +570,7 @@ class LineHandler:
             sender_settings = self._get_user_settings(sender_key)
             sender_font = sender_settings.get("font", font_key)
             quiz_mode = stored_item.get("quiz_mode", "intersection")
+            quiz_prompt = stored_item.get("quiz_prompt", "")
             display_name = self.profile_client.get_display_name(
                 event.get("source", {}), sender_id
             )
@@ -557,6 +583,7 @@ class LineHandler:
             )
             answer_text = answer_template.format(name=display_name, number=number)
             try:
+                prompt_text = self._resolve_quiz_prompt(quiz_mode, quiz_prompt)
                 if quiz_mode == "union":
                     q_path, a_path, u_path = self.generator.generate_images_with_union(
                         stored_word, sender_font
@@ -564,11 +591,10 @@ class LineHandler:
                     u_url = self.image_store.get_image_url(
                         "u", stored_word, sender_font, u_path
                     )
-                    prompt = self.texts.get("quiz_prompt_union", "何の和集合？")
                     self._reply(
                         reply_token,
                         [
-                            self._text_message(prompt),
+                            self._text_message(prompt_text),
                             self._image_message(u_url),
                             self._text_message(answer_text),
                         ],
@@ -581,11 +607,10 @@ class LineHandler:
                     q_url = self.image_store.get_image_url(
                         "q", stored_word, sender_font, q_path
                     )
-                    prompt = self.texts.get("quiz_prompt_common", "何の共通部分？")
                     self._reply(
                         reply_token,
                         [
-                            self._text_message(prompt),
+                            self._text_message(prompt_text),
                             self._image_message(q_url),
                             self._text_message(answer_text),
                         ],
@@ -785,6 +810,7 @@ class LineHandler:
         unset_label = self.texts.get("quiz_unset", "未設定")
         user_settings = self._get_user_settings(user_key)
         quiz_mode = user_settings.get("quiz_mode", "intersection")
+        quiz_prompt = user_settings.get("quiz_prompt", "")
         for number in range(1, 11):
             if number not in entries:
                 return False
@@ -800,11 +826,18 @@ class LineHandler:
                 return False
             if not self.parser._is_allowed_word(word):
                 return False
-            self.quiz_store.set_word(user_key, number, word, entry_mode)
+            self.quiz_store.set_word(user_key, number, word, entry_mode, quiz_prompt)
         return True
 
     def _quiz_mode_label(self, quiz_mode: str) -> str:
         return "和集合" if quiz_mode == "union" else "共通部分"
+
+    def _resolve_quiz_prompt(self, quiz_mode: str, quiz_prompt: str) -> str:
+        if quiz_prompt:
+            return quiz_prompt
+        if quiz_mode == "union":
+            return self.texts.get("quiz_prompt_union", "何の和集合？")
+        return self.texts.get("quiz_prompt_common", "何の共通部分？")
 
     def _parse_mode_label(self, mode_label: str) -> str:
         if mode_label == "和集合":

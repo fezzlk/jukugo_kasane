@@ -134,6 +134,10 @@ def build_line_settings_quick_reply() -> dict:
             "type": "action",
             "action": {"type": "message", "label": "フォント", "text": "#フォント"},
         },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "問題文", "text": "#問題文"},
+        },
     ]
     return {"items": items}
 
@@ -208,6 +212,8 @@ line_texts = {
     "quiz_dispatch_template": f"グループで「@{line_bot_name} {{number}}」と送ると出題されます。",
     "quiz_dispatch_list": f"グループで「@{line_bot_name} (問題番号)」と送ると出題されます。",
     "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
+    "quiz_prompt_help": "問題文を設定するには「#問題文 〜」と送ってください。",
+    "quiz_prompt_set": "問題文を「{prompt}」に設定しました。",
     "answer_release_format": f"解答発表は「@{line_bot_name} 答え (問題番号)」と送ってください。",
     "bulk_update_success": "問題一覧を更新しました。",
     "bulk_update_failed": "問題一覧の形式が正しくありません。",
@@ -236,6 +242,7 @@ line_keywords = {
     "menu_usage": "使い方",
     "menu_mode": "出題モード",
     "menu_font": "フォント",
+    "prompt": "問題文",
     "mode_common": "共通部分",
     "mode_union": "和集合",
     "font_prefix": "font_",

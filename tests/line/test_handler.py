@@ -119,11 +119,19 @@ def _build_handler(
         def __init__(self):
             self.data = {}
 
-        def set_word(self, user_id, number, word, quiz_mode="intersection"):
+        def set_word(
+            self,
+            user_id,
+            number,
+            word,
+            quiz_mode="intersection",
+            quiz_prompt="",
+        ):
             old_word = self.get_word(user_id, number)
             self.data.setdefault(user_id, {})[number] = {
                 "word": word,
                 "quiz_mode": quiz_mode,
+                "quiz_prompt": quiz_prompt,
             }
             return old_word
 
