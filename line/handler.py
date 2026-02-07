@@ -1,4 +1,5 @@
 import json
+import re
 
 from line.image_store import BaseImageStore
 from line.parser import LineCommandParser
@@ -717,13 +718,26 @@ class LineHandler:
         )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
-        items = self.quiz_store.list_words(user_key)
+        if hasattr(self.quiz_store, "list_quiz_items"):
+            items = self.quiz_store.list_quiz_items(user_key)
+        else:
+            items = {}
+            for number, word in self.quiz_store.list_words(user_key).items():
+                items[number] = {"word": word, "quiz_mode": "intersection"}
         unset_label = self.texts.get("quiz_unset", "未設定")
         title = self.texts.get("quiz_list_title", "【問題一覧】")
         lines = [title]
         for number in range(1, 11):
-            word = items.get(number, unset_label)
-            lines.append(f"{number}. {word}")
+            item = items.get(number)
+            if not item:
+                lines.append(f"{number}. {unset_label}")
+                continue
+            word = item.get("word") or unset_label
+            if word == unset_label:
+                lines.append(f"{number}. {word}")
+                continue
+            mode_label = self._quiz_mode_label(item.get("quiz_mode", "intersection"))
+            lines.append(f"{number}. {word}({mode_label})")
         dispatch_list = self.texts.get("quiz_list_footer") or self.texts.get(
             "quiz_dispatch_list",
             f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
@@ -758,7 +772,11 @@ class LineHandler:
                 return {}
             if number in entries:
                 return {}
-            entries[number] = word
+            word_text, mode_label = self._split_word_with_mode(word)
+            entries[number] = {
+                "word": word_text,
+                "quiz_mode": self._parse_mode_label(mode_label),
+            }
         if not entries:
             return {}
         return entries
@@ -770,7 +788,11 @@ class LineHandler:
         for number in range(1, 11):
             if number not in entries:
                 return False
-            word = entries[number]
+            entry = entries[number]
+            word = entry.get("word", "") if isinstance(entry, dict) else entry
+            entry_mode = (
+                entry.get("quiz_mode") if isinstance(entry, dict) else None
+            ) or quiz_mode
             if word == unset_label:
                 self.quiz_store.delete_word(user_key, number)
                 continue
@@ -778,11 +800,24 @@ class LineHandler:
                 return False
             if not self.parser._is_allowed_word(word):
                 return False
-            self.quiz_store.set_word(user_key, number, word, quiz_mode)
+            self.quiz_store.set_word(user_key, number, word, entry_mode)
         return True
 
     def _quiz_mode_label(self, quiz_mode: str) -> str:
         return "和集合" if quiz_mode == "union" else "共通部分"
+
+    def _parse_mode_label(self, mode_label: str) -> str:
+        if mode_label == "和集合":
+            return "union"
+        if mode_label == "共通部分":
+            return "intersection"
+        return "intersection"
+
+    def _split_word_with_mode(self, word: str) -> tuple:
+        match = re.match(r"^(.*?)(?:\(([^()]*)\))?$", word)
+        if not match:
+            return word, ""
+        return match.group(1).strip(), (match.group(2) or "").strip()
 
     def _is_bot_mentioned(self, message: dict) -> bool:
         mentionees = message.get("mention", {}).get("mentionees", []) if message else []

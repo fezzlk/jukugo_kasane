@@ -147,6 +147,12 @@ def _build_handler(
                 result[number] = item.get("word", "")
             return result
 
+        def list_quiz_items(self, user_id):
+            result = {}
+            for number, item in self.data.get(user_id, {}).items():
+                result[number] = dict(item)
+            return result
+
     class DummyProfileClient:
         def get_display_name(self, source, user_id):
             return "Tester"
@@ -514,7 +520,7 @@ def test_menu_list_returns_quiz_list(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None)
-    handler.quiz_store.set_word("user:u1", 2, "ab")
+    handler.quiz_store.set_word("user:u1", 2, "ab", "intersection")
     payload = {
         "events": [
             {
@@ -532,7 +538,7 @@ def test_menu_list_returns_quiz_list(monkeypatch):
     assert status == 200
     message = captured["json"]["messages"][0]["text"]
     assert "1." in message
-    assert "2. ab" in message
+    assert "2. ab(共通部分)" in message
 
 
 def test_menu_settings_returns_settings_quick_reply(monkeypatch):
@@ -1279,7 +1285,7 @@ def test_group_answer_release_video(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
-    handler.quiz_store.set_word("user:u1", 1, "abcd", "intersection")
+    handler.quiz_store.set_word("user:u1", 1, "abcd", "union")
     payload = {
         "events": [
             {
@@ -1325,7 +1331,7 @@ def test_bulk_quiz_list_update(monkeypatch):
                 "replyToken": "rt",
                 "message": {
                     "type": "text",
-                    "text": "【問題一覧】\n1. cd\n2. 未設定\n3. ef\n4. 未設定\n5. gh\n6. 未設定\n7. ij\n8. 未設定\n9. kl\n10. 未設定\nグループで「@文字合成ボット (問題番号)」と送ると出題されます。",
+                    "text": "【問題一覧】\n1. cd(共通部分)\n2. 未設定\n3. ef(共通部分)\n4. 未設定\n5. gh(共通部分)\n6. 未設定\n7. ij(共通部分)\n8. 未設定\n9. kl(共通部分)\n10. 未設定\nグループで「@文字合成ボット (問題番号)」と送ると出題されます。",
                 },
                 "source": {"type": "user", "userId": "u1"},
             }

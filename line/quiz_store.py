@@ -92,6 +92,20 @@ class SqliteQuizStore:
             result[int(row["number"])] = row["word"]
         return result
 
+    def list_quiz_items(self, user_id: str) -> dict:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT number, word, quiz_mode FROM quiz_items WHERE user_id=?",
+                (user_id,),
+            ).fetchall()
+        result = {}
+        for row in rows:
+            result[int(row["number"])] = {
+                "word": row["word"],
+                "quiz_mode": row["quiz_mode"] or "intersection",
+            }
+        return result
+
     def _now(self) -> str:
         return datetime.utcnow().isoformat() + "Z"
 
@@ -164,4 +178,22 @@ class DatastoreQuizStore:
             word = entity.get("word", "")
             if word:
                 result[number] = word
+        return result
+
+    def list_quiz_items(self, user_id: str) -> dict:
+        query = self._client_or_create().query(kind=self.kind)
+        query.add_filter("user_id", "=", user_id)
+        result = {}
+        for entity in query.fetch():
+            try:
+                number = int(entity.get("number", 0))
+            except (TypeError, ValueError):
+                continue
+            word = entity.get("word", "")
+            if not word:
+                continue
+            result[number] = {
+                "word": word,
+                "quiz_mode": entity.get("quiz_mode", "intersection") or "intersection",
+            }
         return result
