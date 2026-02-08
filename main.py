@@ -53,6 +53,18 @@ line_quiz_db_path = os.getenv("LINE_QUIZ_DB_PATH", "line/quiz.db").strip()
 line_quiz_store_mode = os.getenv("LINE_QUIZ_STORE", "sqlite").strip().lower()
 line_firestore_project = os.getenv("LINE_FIRESTORE_PROJECT", "").strip()
 
+def _mask_presence(value: str) -> str:
+    return "set" if value else "missing"
+
+logger.info(
+    "Secret/env presence: LINE_CHANNEL_SECRET=%s, LINE_CHANNEL_ACCESS_TOKEN=%s, "
+    "LINE_BOT_USER_ID=%s, SERVER_FQDN=%s",
+    _mask_presence(line_channel_secret),
+    _mask_presence(line_channel_access_token),
+    _mask_presence(line_bot_user_id),
+    _mask_presence(server_fqdn),
+)
+
 
 def build_generate_url(word, font_key):
     query = {"jukugo": word}
