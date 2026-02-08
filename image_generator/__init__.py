@@ -53,6 +53,27 @@ class ImageGenerator:
         self.font_key_pattern = re.compile(r"^[A-Za-z0-9]{2,10}$")
 
         self.font = self._get_available_font()
+        self.available_font_keys = self._detect_available_font_keys()
+
+    def _detect_available_font_keys(self) -> list:
+        available = []
+        for key in self.font_key_order:
+            font_path = self.font_key_map.get(key)
+            if not font_path:
+                continue
+            if self._is_font_usable(font_path):
+                available.append(key)
+        return available
+
+    def _is_font_usable(self, font_path: str) -> bool:
+        if not os.path.exists(font_path):
+            return False
+        try:
+            ImageFont.truetype(font_path, 10)
+            return True
+        except Exception as e:
+            logger.warning(f"フォント読み込み失敗: {font_path} - {e}")
+            return False
 
     def _get_available_font(self) -> ImageFont.ImageFont:
         """利用可能なフォントを取得"""
@@ -73,7 +94,7 @@ class ImageGenerator:
 
     def get_font_keys(self) -> list:
         """利用可能なフォント識別子を取得"""
-        return ["default"] + list(self.font_key_order)
+        return list(self.available_font_keys)
 
     def get_default_font_key(self) -> str:
         """デフォルトで選ばれるフォント識別子を取得"""

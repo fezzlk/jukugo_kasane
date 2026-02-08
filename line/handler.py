@@ -415,7 +415,9 @@ class LineHandler:
                 user_key, number, word, quiz_mode, quiz_prompt
             )
             msg = self._text_message(
-                self._build_set_reply_text(number, word, old_word, quiz_mode)
+                self._build_set_reply_text(
+                    number, word, old_word, quiz_mode, quiz_prompt
+                )
             )
             self._reply(reply_token, [msg])
             return True
@@ -734,7 +736,12 @@ class LineHandler:
         return ("ok", number, word)
 
     def _build_set_reply_text(
-        self, number: int, word: str, old_word: str, quiz_mode: str
+        self,
+        number: int,
+        word: str,
+        old_word: str,
+        quiz_mode: str,
+        quiz_prompt: str = "",
     ) -> str:
         dispatch_template = self.texts.get(
             "quiz_dispatch_template",
@@ -748,15 +755,16 @@ class LineHandler:
             "答え (問題番号)」と送ってください。",
         )
         mode_label = self._quiz_mode_label(quiz_mode)
+        prompt_suffix = f"\n問題文:{quiz_prompt}" if quiz_prompt else ""
         if old_word:
             return (
                 f"{number}問目に「{word}」を{mode_label}モードで登録しました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
-                f"{dispatch_text}\n{answer_release}"
+                f"{dispatch_text}\n{answer_release}{prompt_suffix}"
             )
         return (
             f"{number}問目に「{word}」を{mode_label}モードで登録しました。\n"
-            f"{dispatch_text}\n{answer_release}"
+            f"{dispatch_text}\n{answer_release}{prompt_suffix}"
         )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
@@ -781,7 +789,7 @@ class LineHandler:
             mode_label = self._quiz_mode_label(item.get("quiz_mode", "intersection"))
             prompt = item.get("quiz_prompt", "")
             if prompt:
-                lines.append(f"{number}. {word}({mode_label}) @{prompt}")
+                lines.append(f"{number}. {word}({mode_label})\n@{prompt}")
             else:
                 lines.append(f"{number}. {word}({mode_label})")
         dispatch_list = self.texts.get("quiz_list_footer") or self.texts.get(

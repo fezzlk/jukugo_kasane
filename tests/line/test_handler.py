@@ -547,7 +547,7 @@ def test_menu_list_returns_quiz_list(monkeypatch):
     assert status == 200
     message = captured["json"]["messages"][0]["text"]
     assert "1." in message
-    assert "2. ab(共通部分) @質問ですか" in message
+    assert "2. ab(共通部分)\n@質問ですか" in message
 
 
 def test_menu_settings_returns_settings_quick_reply(monkeypatch):
