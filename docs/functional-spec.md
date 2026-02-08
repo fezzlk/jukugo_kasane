@@ -42,8 +42,9 @@ Kasane is a Flask-based web application and bot suite that generates image-based
   - Returns JSON health status.
 
 ### Font Handling
-- Supported font keys: `default`, `mincho`, `monogothic`, `hiragino`, `dejavu`.
-- A font key must be 2-10 alphanumeric characters, and must exist in the configured font map unless `default`.
+- Supported font keys: `mincho`, `monogothic`, `hiragino`, `dejavu`.
+- Available keys are detected at server startup; only usable fonts are presented.
+- A font key must be 2-10 alphanumeric characters, and must exist in the configured font map.
 
 ## X (Twitter) Bot
 
@@ -76,11 +77,13 @@ Kasane is a Flask-based web application and bot suite that generates image-based
 - Quiz registration:
   - Send `1.<word>` through `10.<word>` to register quiz items.
   - Word length must be 2-8 characters.
+  - If a custom quiz prompt exists, it is appended to the success message as `問題文:(カスタム問題文)`.
 - Settings:
   - Users can set quiz mode (intersection/union), font, and custom quiz prompt text.
   - Settings are persisted in `line_settings.json` or a path defined by `LINE_SETTINGS_FILE_PATH`.
 - Bulk update:
   - Users can paste a full quiz list and update all 10 items in one message.
+  - When displaying quiz prompts, the `@` line is shown on a new line.
 
 ### Group Features
 - When the bot is mentioned:

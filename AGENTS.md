@@ -17,6 +17,9 @@ working on the codebase.
 - Do not add external libraries.
 - Preserve the basic structure.
 - If anything is unclear, ask questions only and do not implement.
+- In reviews, verify user-facing help/usage text covers implemented settings and behavior.
+- In reviews, include user-facing messages (help/usage, error messages, settings guidance) in scope.
+- When reviewing specs, do both spec-to-implementation and implementation-to-spec/help cross-checks.
 
 ## Output
 - Summarize changes and point to affected files.
