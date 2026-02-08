@@ -15,4 +15,5 @@ jobs:
   resolve:
     if: github.event.label.name == 'fix-me'
     uses: OpenHands/OpenHands/.github/workflows/openhands-resolver.yml@main
-    secrets: inherit
+    secrets:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
