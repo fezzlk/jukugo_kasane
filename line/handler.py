@@ -620,21 +620,38 @@ class LineHandler:
                     )
                     self.image_store.cleanup([q_path, a_path, u_path])
                 else:
-                    q_path, a_path = self.generator.generate_images(
-                        stored_word, sender_font
-                    )
-                    q_url = self.image_store.get_image_url(
-                        "q", stored_word, sender_font, q_path
-                    )
-                    self._reply(
-                        reply_token,
-                        [
-                            self._text_message(prompt_text),
-                            self._image_message(q_url),
-                            self._text_message(answer_text),
-                        ],
-                    )
-                    self.image_store.cleanup([q_path, a_path])
+                    if len(stored_word) >= 3:
+                        q_path, a_path, u_path = self.generator.generate_images_with_union(
+                            stored_word, sender_font
+                        )
+                        q_url = self.image_store.get_image_url(
+                            "q", stored_word, sender_font, q_path
+                        )
+                        self._reply(
+                            reply_token,
+                            [
+                                self._text_message(prompt_text),
+                                self._image_message(q_url),
+                                self._text_message(answer_text),
+                            ],
+                        )
+                        self.image_store.cleanup([q_path, a_path, u_path])
+                    else:
+                        q_path, a_path = self.generator.generate_images(
+                            stored_word, sender_font
+                        )
+                        q_url = self.image_store.get_image_url(
+                            "q", stored_word, sender_font, q_path
+                        )
+                        self._reply(
+                            reply_token,
+                            [
+                                self._text_message(prompt_text),
+                                self._image_message(q_url),
+                                self._text_message(answer_text),
+                            ],
+                        )
+                        self.image_store.cleanup([q_path, a_path])
             except Exception as exc:
                 self.logger.error("LINE group quiz generate error: %s", exc)
                 generate_failed = self.texts.get(

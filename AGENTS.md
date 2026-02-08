@@ -20,6 +20,9 @@ working on the codebase.
 - In reviews, verify user-facing help/usage text covers implemented settings and behavior.
 - In reviews, include user-facing messages (help/usage, error messages, settings guidance) in scope.
 - When reviewing specs, do both spec-to-implementation and implementation-to-spec/help cross-checks.
+- In reviews, check boundary conditions for word length (2/3/8 characters) across flows.
+- In reviews, verify generator API preconditions (2-char only vs 2-8 char) match call sites.
+- In reviews, include at least one end-to-end LINE group flow (quiz -> answer) scenario.
 
 ## Output
 - Summarize changes and point to affected files.
