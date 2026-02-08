@@ -64,6 +64,17 @@ logger.info(
     _mask_presence(line_bot_user_id),
     _mask_presence(server_fqdn),
 )
+print(
+    "Secret/env presence: LINE_CHANNEL_SECRET=%s, LINE_CHANNEL_ACCESS_TOKEN=%s, "
+    "LINE_BOT_USER_ID=%s, SERVER_FQDN=%s"
+    % (
+        _mask_presence(line_channel_secret),
+        _mask_presence(line_channel_access_token),
+        _mask_presence(line_bot_user_id),
+        _mask_presence(server_fqdn),
+    ),
+    flush=True,
+)
 
 
 def build_generate_url(word, font_key):
