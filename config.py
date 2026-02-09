@@ -17,13 +17,6 @@ class Config:
     STATIC_DIR = os.path.join(BASE_DIR, "static")
     TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
-    # Twitter API設定
-    X_API_KEY = os.environ.get("X_API_KEY")
-    X_API_KEY_SECRET = os.environ.get("X_API_KEY_SECRET")
-    X_ACCESS_TOKEN = os.environ.get("X_ACCESS_TOKEN")
-    X_ACCESS_TOKEN_SECRET = os.environ.get("X_ACCESS_TOKEN_SECRET")
-    X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN")
-
     # 外部API設定
     KASANE_API_URL = os.environ.get("KASANE_API_URL")
     JUKUGO_API_URL = os.environ.get("JUKUGO_API_URL")

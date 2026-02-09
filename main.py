@@ -1,12 +1,7 @@
 # -*- coding:utf8 -*-
 import os
 import logging
-import base64
-import hashlib
 import json
-import secrets
-from datetime import datetime, timedelta
-import requests
 from urllib.parse import urlencode
 from flask import (
     Flask,
@@ -14,12 +9,8 @@ from flask import (
     send_from_directory,
     jsonify,
     request,
-    redirect,
-    session,
 )
 from image_generator import ImageGenerator
-from xbot import XBot
-import token_store
 from line import store as line_store
 from line.handler import LineHandler
 from line.image_store import GcsImageStore, LocalImageStore
@@ -36,11 +27,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-bot = XBot()
 server_fqdn = os.getenv("SERVER_FQDN", "").rstrip("/")
-oauth_client_id = os.getenv("X_CLIENT_ID", "")
-oauth_client_secret = os.getenv("X_CLIENT_SECRET", "")
-oauth_scopes = "tweet.write users.read offline.access"
 line_channel_secret = os.getenv("LINE_CHANNEL_SECRET", "")
 line_channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 line_default_font_key = "default"
@@ -87,17 +74,6 @@ def build_generate_url(word, font_key):
         if server_fqdn
         else f"/generate?{query_string}"
     )
-
-
-def build_oauth_redirect_uri():
-    if not server_fqdn:
-        raise ValueError("SERVER_FQDN is required.")
-    return f"{server_fqdn}/oauth/callback"
-
-
-def build_code_challenge(code_verifier: str) -> str:
-    digest = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("utf-8")
 
 
 def build_line_usage_text(bot_name: str) -> str:
@@ -304,86 +280,6 @@ def index():
     return render_template("index.html", font_options=generator.get_font_keys())
 
 
-@app.route("/oauth/start")
-def oauth_start():
-    """OAuth 2.0 (User Context) start"""
-    if not oauth_client_id or not oauth_client_secret:
-        return "OAuth client credentials are required.", 500
-
-    code_verifier = secrets.token_urlsafe(32)
-    code_challenge = build_code_challenge(code_verifier)
-    state = secrets.token_urlsafe(16)
-
-    session["oauth_state"] = state
-    session["oauth_code_verifier"] = code_verifier
-
-    redirect_uri = build_oauth_redirect_uri()
-    params = {
-        "response_type": "code",
-        "client_id": oauth_client_id,
-        "redirect_uri": redirect_uri,
-        "scope": oauth_scopes,
-        "state": state,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-    }
-    authorize_url = "https://twitter.com/i/oauth2/authorize?" + urlencode(params)
-    return redirect(authorize_url)
-
-
-@app.route("/oauth/callback")
-def oauth_callback():
-    """OAuth 2.0 callback"""
-    code = request.args.get("code")
-    state = request.args.get("state")
-    saved_state = session.get("oauth_state")
-    code_verifier = session.get("oauth_code_verifier")
-
-    if not code or not state or state != saved_state:
-        return "Invalid OAuth state.", 400
-
-    if not code_verifier:
-        return "Missing code verifier.", 400
-
-    redirect_uri = build_oauth_redirect_uri()
-    token_url = "https://api.twitter.com/2/oauth2/token"
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": redirect_uri,
-        "code_verifier": code_verifier,
-        "client_id": oauth_client_id,
-    }
-
-    response = requests.post(
-        token_url,
-        data=data,
-        auth=(oauth_client_id, oauth_client_secret),
-        timeout=10,
-    )
-
-    if response.status_code >= 400:
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "token exchange failed",
-                    "details": response.text,
-                }
-            ),
-            400,
-        )
-
-    token_data = response.json()
-    token_data["obtained_at"] = int(datetime.utcnow().timestamp())
-    if not token_store.save_token_data(token_data):
-        return jsonify({"status": "error", "message": "token save failed"}), 500
-    if not token_store.save_access_token(token_data):
-        return jsonify({"status": "error", "message": "access token save failed"}), 500
-
-    return jsonify({"status": "success"})
-
-
 @app.route("/<word>")
 def generate(word):
     """メインフォーム"""
@@ -567,217 +463,6 @@ def line_callback_alias():
 @app.route("/", methods=["POST"])
 def line_callback_root():
     return _handle_line_callback()
-
-
-@app.route("/question", methods=["GET", "POST"])
-def post_question():
-    """問題投稿エンドポイント"""
-    try:
-        # リクエストボディからjukugoを取得（オプション）
-        jukugo = "例題"  # デフォルト値
-
-        test_mode = False
-        skip_media = False
-
-        if request.method == "GET":
-            # GETリクエストの場合、クエリパラメータから取得
-            jukugo = request.args.get("jukugo", "例題")
-            test_mode = request.args.get("test", "false").lower() == "true"
-            skip_media = request.args.get("no_media", "false").lower() == "true"
-        elif request.is_json:
-            # POSTリクエストの場合、JSONボディから取得
-            data = request.get_json()
-            jukugo = data.get("jukugo", "例題")
-            test_mode = data.get("test", False)
-            skip_media = data.get("no_media", False)
-
-        logger.info(f"問題投稿リクエスト: jukugo={jukugo}, test_mode={test_mode}")
-
-        success = bot.post_question(jukugo, test_mode, skip_media=skip_media)
-
-        if success:
-            response_data = {
-                "status": "success",
-                "message": "問題投稿が完了しました",
-                "jukugo": jukugo,
-            }
-            logger.info("問題投稿完了")
-            return jsonify(response_data), 200
-        else:
-            response_data = {"status": "error", "message": "問題投稿に失敗しました"}
-            logger.error("問題投稿失敗")
-            return jsonify(response_data), 500
-
-    except Exception as e:
-        error_message = f"問題投稿エラー: {str(e)}"
-        logger.error(error_message)
-
-        response_data = {
-            "status": "error",
-            "message": "内部サーバーエラーが発生しました",
-            "error": str(e),
-        }
-        return jsonify(response_data), 500
-
-
-@app.route("/question/by-date", methods=["GET"])
-def post_question_by_date():
-    """dateから問題投稿"""
-    try:
-        date_str = request.args.get("date")
-        if not date_str:
-            jst_now = datetime.utcnow() + timedelta(hours=9)
-            date_str = jst_now.strftime("%Y/%m/%d")
-
-        test_mode = request.args.get("test", "false").lower() == "true"
-        skip_media = request.args.get("no_media", "false").lower() == "true"
-        success = bot.post_question_by_date(date_str, test_mode, skip_media=skip_media)
-
-        if success:
-            response_data = {
-                "status": "success",
-                "message": "問題投稿が完了しました",
-                "date": date_str,
-            }
-            return jsonify(response_data), 200
-
-        response_data = {"status": "error", "message": "問題投稿に失敗しました"}
-        return jsonify(response_data), 500
-
-    except ValueError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-    except Exception as e:
-        error_message = f"問題投稿エラー: {str(e)}"
-        logger.error(error_message)
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "内部サーバーエラーが発生しました",
-                    "error": str(e),
-                }
-            ),
-            500,
-        )
-
-
-@app.route("/answer", methods=["GET", "POST"])
-def post_answer():
-    """解答投稿エンドポイント"""
-    try:
-        logger.info("解答投稿リクエスト")
-
-        success = bot.post_answer()
-
-        if success:
-            response_data = {"status": "success", "message": "解答投稿が完了しました"}
-            logger.info("解答投稿完了")
-            return jsonify(response_data), 200
-        else:
-            response_data = {"status": "error", "message": "解答投稿に失敗しました"}
-            logger.error("解答投稿失敗")
-            return jsonify(response_data), 500
-
-    except Exception as e:
-        error_message = f"解答投稿エラー: {str(e)}"
-        logger.error(error_message)
-
-        response_data = {
-            "status": "error",
-            "message": "内部サーバーエラーが発生しました",
-            "error": str(e),
-        }
-        return jsonify(response_data), 500
-
-
-@app.route("/answer/by-jukugo", methods=["GET"])
-def post_answer_by_jukugo():
-    """指定熟語の解答画像を生成して投稿"""
-    try:
-        jukugo = request.args.get("jukugo")
-        if not jukugo:
-            return jsonify({"status": "error", "message": "jukugo is required"}), 400
-
-        test_mode = request.args.get("test", "false").lower() == "true"
-        success = bot.post_answer_for_jukugo(jukugo, test_mode)
-
-        if success:
-            response_data = {
-                "status": "success",
-                "message": "解答投稿が完了しました",
-                "jukugo": jukugo,
-            }
-            return jsonify(response_data), 200
-
-        response_data = {"status": "error", "message": "解答投稿に失敗しました"}
-        return jsonify(response_data), 500
-
-    except ValueError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-    except Exception as e:
-        error_message = f"解答投稿エラー: {str(e)}"
-        logger.error(error_message)
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "内部サーバーエラーが発生しました",
-                    "error": str(e),
-                }
-            ),
-            500,
-        )
-
-
-@app.route("/jukugo/random", methods=["GET"])
-def get_random_jukugo():
-    """ランダム四字熟語取得エンドポイント"""
-    try:
-        jukugo = bot.get_random_jukugo()
-
-        response_data = {"status": "success", "jukugo": jukugo}
-        logger.info(f"四字熟語取得完了: {jukugo}")
-        return jsonify(response_data), 200
-
-    except Exception as e:
-        error_message = f"四字熟語取得エラー: {str(e)}"
-        logger.error(error_message)
-
-        response_data = {
-            "status": "error",
-            "message": "四字熟語の取得に失敗しました",
-            "error": str(e),
-        }
-        return jsonify(response_data), 500
-
-
-@app.route("/diagnostics/oauth2", methods=["GET"])
-def diagnostics_oauth2():
-    """OAuth2 access token sanity check."""
-    try:
-        access_token = bot._load_oauth2_access_token()
-        if not access_token:
-            return jsonify({"status": "error", "message": "access token missing"}), 500
-
-        response = requests.get(
-            "https://api.twitter.com/2/users/me",
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10,
-        )
-        return (
-            jsonify(
-                {
-                    "status": "success",
-                    "http_status": response.status_code,
-                    "body": response.text,
-                }
-            ),
-            200,
-        )
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
 @app.errorhandler(404)
 def not_found(error):
     """404エラーハンドラー"""

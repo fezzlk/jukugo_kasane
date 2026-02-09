@@ -1,8 +1,6 @@
 # Webフレームワーク
 Flask==3.0.0
 
-# Twitter API
-tweepy==4.14.0
 
 # HTTP リクエスト
 requests==2.31.0

@@ -1,9 +1,8 @@
 # Functional Specification: Kasane
 
 ## Overview
-Kasane is a Flask-based web application and bot suite that generates image-based kanji quizzes, posts them to X (Twitter), and provides interactive features via LINE. It includes:
+Kasane is a Flask-based web application and bot suite that generates image-based kanji quizzes and provides interactive features via LINE. It includes:
 - A web UI for generating quiz images and union/intersection visuals.
-- REST-style API endpoints for posting quiz questions/answers to X.
 - A LINE Messaging API webhook that supports image synthesis, quiz registration, and group quiz gameplay.
 
 ## Core Concepts
@@ -45,24 +44,6 @@ Kasane is a Flask-based web application and bot suite that generates image-based
 - Supported font keys: `mincho`, `monogothic`, `hiragino`, `dejavu`.
 - Available keys are detected at server startup; only usable fonts are presented.
 - A font key must be 2-10 alphanumeric characters, and must exist in the configured font map.
-
-## X (Twitter) Bot
-
-### Posting Flow
-- `/question` endpoint:
-  - Fetches Q and A images from the local web app and posts the Q image with the status text.
-  - Supports test mode (no tweet) and optional media skip.
-- `/answer` endpoint:
-  - Finds the most recent A image in the images directory and posts it as the answer.
-- `/answer/by-jukugo?jukugo=<word>`:
-  - Generates and posts the A image for the specified word.
-- `/question/by-date?date=YYYY/MM/DD`:
-  - Looks up a 2-character word from a Google Spreadsheet CSV and posts the quiz for that date.
-
-### X Authentication
-- OAuth 2.0 (User Context) is used for tweet creation.
-- Access tokens are stored in `token.json` or in GCS (if configured).
-- Media upload uses OAuth 1.0a via `tweepy.API` when an image is included.
 
 ## LINE Bot
 
@@ -117,16 +98,11 @@ Kasane is a Flask-based web application and bot suite that generates image-based
 ## External Dependencies
 - `ffmpeg` must be available for union video creation.
 - `PIL` (Pillow) for image rendering.
-- `tweepy` for X media upload.
 - `requests` and `BeautifulSoup` for external HTTP calls and parsing.
 
 ## Configuration (Environment Variables)
 - Web:
   - `SECRET_KEY`, `PORT`, `SERVER_FQDN`
-- X (Twitter):
-  - `X_CLIENT_ID`, `X_CLIENT_SECRET`
-  - `X_BEARER_TOKEN`
-  - `X_API_KEY`, `X_API_KEY_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
 - External data:
   - `KASANE_API_URL`, `JUKUGO_API_URL`
   - `SPREADSHEET_URL` or `SPREADSHEET_ID` + `SPREADSHEET_GID`

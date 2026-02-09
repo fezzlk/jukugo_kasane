@@ -1,9 +1,8 @@
 # 機能仕様書: Kasane
 
 ## 概要
-Kasane は Flask ベースの Web アプリケーションおよびボット群で、漢字のクイズ画像生成、X（旧 Twitter）への投稿、LINE 連携による対話機能を提供します。主な構成は以下です。
+Kasane は Flask ベースの Web アプリケーションおよびボット群で、漢字のクイズ画像生成と LINE 連携による対話機能を提供します。主な構成は以下です。
 - クイズ画像や和集合/共通部分の生成を行う Web UI
-- X への問題・解答投稿用 API
 - LINE Messaging API webhook による画像合成・出題管理・グループ出題
 
 ## 基本ルール
@@ -44,24 +43,6 @@ Kasane は Flask ベースの Web アプリケーションおよびボット群�
 ### フォント取り扱い
 - 対応キー: `default`, `mincho`, `monogothic`, `hiragino`, `dejavu`
 - キーは2〜10文字の英数字、かつ `default` 以外は定義済みである必要があります
-
-## X (Twitter) ボット
-
-### 投稿フロー
-- `/question`:
-  - ローカル Web から Q/A 画像を取得し、Q 画像で問題投稿
-  - テストモード（投稿スキップ）とメディア省略に対応
-- `/answer`:
-  - images 配下の最新 A 画像を投稿
-- `/answer/by-jukugo?jukugo=<word>`:
-  - 指定熟語の A 画像を生成して投稿
-- `/question/by-date?date=YYYY/MM/DD`:
-  - Google スプレッドシート CSV から指定日付の2文字熟語を取得して出題
-
-### 認証
-- OAuth 2.0(User Context)でツイート作成
-- トークンは `token.json` または GCS 保存（設定時）
-- 画像アップロードは OAuth 1.0a を使用
 
 ## LINE ボット
 
@@ -116,16 +97,11 @@ Kasane は Flask ベースの Web アプリケーションおよびボット群�
 ## 外部依存
 - `ffmpeg`（動画生成）
 - `PIL`（Pillow）
-- `tweepy`（X メディアアップロード）
 - `requests`, `BeautifulSoup`（外部取得と解析）
 
 ## 設定（環境変数）
 - Web:
   - `SECRET_KEY`, `PORT`, `SERVER_FQDN`
-- X (Twitter):
-  - `X_CLIENT_ID`, `X_CLIENT_SECRET`
-  - `X_BEARER_TOKEN`
-  - `X_API_KEY`, `X_API_KEY_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
 - 外部データ:
   - `KASANE_API_URL`, `JUKUGO_API_URL`
   - `SPREADSHEET_URL` または `SPREADSHEET_ID` + `SPREADSHEET_GID`
