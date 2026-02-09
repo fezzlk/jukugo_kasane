@@ -230,7 +230,6 @@ line_texts = {
     "quiz_prompt_invalid_char": "問題文に@は使用できません。",
     "quiz_prompt_too_long": "問題文は20文字以内で指定してください。",
     "quiz_answer_invalid_char": "解答に@は使用できません。",
-    "quiz_answer_invalid_word": "解答に使用できない文字が含まれています。",
     "quiz_answer_too_long": "解答は20文字以内で指定してください。",
     "quiz_mode_invalid": "出題モードは共通部分/和集合で指定してください。",
     "quiz_format_help": "出題モードや問題文を変更するには以下のフォーマットで送信してください。",

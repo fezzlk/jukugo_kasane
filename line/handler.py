@@ -731,6 +731,14 @@ class LineHandler:
                     msg = self._text_message(answer_format)
                     self._reply(reply_token, [msg])
                     return
+                if not quiz_answer and not self.parser._is_allowed_word(word):
+                    answer_format = self.texts.get(
+                        "answer_format",
+                        "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)",
+                    )
+                    msg = self._text_message(answer_format)
+                    self._reply(reply_token, [msg])
+                    return
                 expected_answer = quiz_answer if quiz_answer else stored_word
                 if expected_answer == word:
                     result = self.texts.get("answer_correct", "正解")
@@ -829,8 +837,6 @@ class LineHandler:
                     return {"status": "invalid_answer_char"}
                 if len(quiz_answer) > 20:
                     return {"status": "invalid_answer_length"}
-                if quiz_answer and not self.parser._is_allowed_word(quiz_answer):
-                    return {"status": "invalid_answer_word"}
                 continue
             if line.startswith("【出題モード】"):
                 mode_label = line[len("【出題モード】") :].strip()
@@ -867,8 +873,6 @@ class LineHandler:
             return ("invalid_number", None, None)
         if not word or len(word) > 20:
             return ("invalid_length", number, word)
-        if not self.parser._is_allowed_word(word):
-            return ("invalid_word", number, word)
         return ("ok", number, word)
 
     def _build_set_reply_text(
@@ -922,10 +926,13 @@ class LineHandler:
                 continue
             mode_label = self._quiz_mode_label(item.get("quiz_mode", "intersection"))
             prompt = item.get("quiz_prompt", "")
+            answer = item.get("quiz_answer", "")
+            entry_lines = [f"{number}. {word}({mode_label})"]
             if prompt:
-                lines.append(f"{number}. {word}({mode_label})\n@{prompt}")
-            else:
-                lines.append(f"{number}. {word}({mode_label})")
+                entry_lines.append(f"@{prompt}")
+            if answer:
+                entry_lines.append(f"【解答】{answer}")
+            lines.append("\n".join(entry_lines))
         dispatch_list = self.texts.get("quiz_list_footer") or self.texts.get(
             "quiz_dispatch_list",
             f"グループで「@{self.texts.get('bot_name', '文字合成ボット')} "
@@ -942,11 +949,27 @@ class LineHandler:
         if not lines[0].startswith(title):
             return None
         entries = {}
+        current_number = None
         for line in lines[1:]:
             footer = self.texts.get("quiz_list_footer")
             if footer and line == footer:
                 continue
             if line.startswith("グループで「@"):
+                continue
+            if line.startswith("@"):
+                if current_number is None:
+                    return {}
+                entries[current_number]["quiz_prompt"] = line[1:].strip()
+                continue
+            if line.startswith("【問題文】"):
+                if current_number is None:
+                    return {}
+                entries[current_number]["quiz_prompt"] = line[len("【問題文】") :].strip()
+                continue
+            if line.startswith("【解答】"):
+                if current_number is None:
+                    return {}
+                entries[current_number]["quiz_answer"] = line[len("【解答】") :].strip()
                 continue
             if "." not in line:
                 return {}
@@ -965,7 +988,9 @@ class LineHandler:
                 "word": word_text,
                 "quiz_mode": self._parse_mode_label(mode_label),
                 "quiz_prompt": prompt_text,
+                "quiz_answer": "",
             }
+            current_number = number
         if not entries:
             return {}
         return entries
@@ -1001,8 +1026,6 @@ class LineHandler:
             if entry_answer and "@" in entry_answer:
                 return False
             if entry_answer and len(entry_answer) > 20:
-                return False
-            if entry_answer and not self.parser._is_allowed_word(entry_answer):
                 return False
             if not self.parser._is_allowed_word(word):
                 return False

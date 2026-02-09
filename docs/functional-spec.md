@@ -77,20 +77,29 @@ Kasane is a Flask-based web application and bot suite that generates image-based
 - Quiz registration:
   - Send `1.<word>` through `10.<word>` to register quiz items.
   - Word length must be 2-8 characters.
-  - If a custom quiz prompt exists, it is appended to the success message as `問題文:(カスタム問題文)`.
-- Settings:
-  - Users can set quiz mode (intersection/union), font, and custom quiz prompt text.
+  - Optional multi-line format allows per-quiz prompt/answer/mode:
+    - `【問題文】<text>` (max 20 chars, no `@`)
+    - `【解答】<text>` (max 20 chars, no `@`; symbols and spaces allowed)
+    - `【出題モード】共通部分/和集合` (defaults to 共通部分)
+  - On successful registration, the bot sends the format guidance in two separate messages.
+ - Settings:
+  - Users can only set font.
   - Settings are persisted in `line_settings.json` or a path defined by `LINE_SETTINGS_FILE_PATH`.
 - Bulk update:
   - Users can paste a full quiz list and update all 10 items in one message.
   - When displaying quiz prompts, the `@` line is shown on a new line.
+  - Custom answers are shown as `【解答】<text>` on their own line.
+  - The bulk list parser accepts the `@<prompt>` line and `【解答】<text>` line for each item.
 
 ### Group Features
 - When the bot is mentioned:
   - `@BotName <number>` posts a quiz image for the specified registered item.
-  - `@BotName 答え <number>` reveals the answer image or video.
+  - `@BotName 答え <number>` reveals the answer image or video, and posts an answer text message:
+    - With custom answer: `合成した文字: <word>\n解答: <custom_answer>`
+    - Without custom answer: `合成した文字: <word>`
 - When a user mentions another user with `@User <number>.<answer>`:
   - The bot validates and replies with correct/incorrect.
+  - If a custom answer is registered, it is used for correctness checking.
 
 ### Storage Options
 - Image delivery:

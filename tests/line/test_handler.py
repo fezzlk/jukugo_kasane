@@ -217,7 +217,6 @@ def _build_handler(
             "quiz_prompt_invalid_char": "PROMPT INVALID",
             "quiz_answer_help": "ANSWER HELP",
             "quiz_answer_invalid_char": "ANSWER INVALID",
-            "quiz_answer_invalid_word": "ANSWER INVALID WORD",
             "quiz_answer_too_long": "ANSWER TOO LONG",
             "quiz_answer_set": "ANSWER SET {answer}",
             "quiz_mode_invalid": "MODE INVALID",
@@ -538,7 +537,7 @@ def test_menu_list_returns_quiz_list(monkeypatch):
     monkeypatch.setattr("line.reply.requests.post", fake_post)
 
     handler = _build_handler(store, generator, logger, lambda: None)
-    handler.quiz_store.set_word("user:u1", 2, "ab", "intersection", "質問ですか")
+    handler.quiz_store.set_word("user:u1", 2, "ab", "intersection", "質問ですか", "こたえ")
     payload = {
         "events": [
             {
@@ -556,7 +555,7 @@ def test_menu_list_returns_quiz_list(monkeypatch):
     assert status == 200
     message = captured["json"]["messages"][0]["text"]
     assert "1." in message
-    assert "2. ab(共通部分)\n@質問ですか" in message
+    assert "2. ab(共通部分)\n@質問ですか\n【解答】こたえ" in message
 
 
 def test_menu_settings_returns_settings_quick_reply(monkeypatch):
@@ -1399,7 +1398,7 @@ def test_bulk_quiz_list_update(monkeypatch):
                 "replyToken": "rt",
                 "message": {
                     "type": "text",
-                    "text": "【問題一覧】\n1. cd(共通部分) @もんだい1\n2. 未設定\n3. ef(共通部分)\n4. 未設定\n5. gh(共通部分)\n6. 未設定\n7. ij(共通部分)\n8. 未設定\n9. kl(共通部分)\n10. 未設定\nグループで「@文字合成ボット (問題番号)」と送ると出題されます。",
+                    "text": "【問題一覧】\n1. cd(共通部分)\n@もんだい1\n【解答】かいとう1\n2. 未設定\n3. ef(共通部分)\n4. 未設定\n5. gh(共通部分)\n6. 未設定\n7. ij(共通部分)\n8. 未設定\n9. kl(共通部分)\n10. 未設定\nグループで「@文字合成ボット (問題番号)」と送ると出題されます。",
                 },
                 "source": {"type": "user", "userId": "u1"},
             }
@@ -1413,5 +1412,6 @@ def test_bulk_quiz_list_update(monkeypatch):
     assert captured["json"]["messages"][0]["text"] == "BULK OK"
     assert handler.quiz_store.get_word("user:u1", 1) == "cd"
     assert handler.quiz_store.get_quiz_item("user:u1", 1)["quiz_prompt"] == "もんだい1"
+    assert handler.quiz_store.get_quiz_item("user:u1", 1)["quiz_answer"] == "かいとう1"
     assert handler.quiz_store.get_word("user:u1", 2) == ""
     assert handler.quiz_store.get_word("user:u1", 3) == "ef"
