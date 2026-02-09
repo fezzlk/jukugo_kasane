@@ -165,6 +165,45 @@ class LineHandler:
             )
             self._reply(reply_token, [msg])
             return
+        if command["type"] == "quiz_answer":
+            value = command.get("value", "")
+            if not value:
+                msg = self._text_message(self.texts.get("quiz_answer_help", ""))
+                self._reply(reply_token, [msg])
+                return
+            if "@" in value:
+                msg = self._text_message(
+                    self.texts.get("quiz_answer_invalid_char", "解答に@は使用できません。")
+                )
+                self._reply(reply_token, [msg])
+                return
+            if len(value) > 20:
+                msg = self._text_message(
+                    self.texts.get("quiz_answer_too_long", "解答は20文字以内で指定してください。")
+                )
+                self._reply(reply_token, [msg])
+                return
+            if not self.parser._is_allowed_word(value):
+                msg = self._text_message(
+                    self.texts.get(
+                        "quiz_answer_invalid_word",
+                        "解答に使用できない文字が含まれています。",
+                    )
+                )
+                self._reply(reply_token, [msg])
+                return
+            user_settings["quiz_answer"] = value
+            if not self._save_user_settings(user_key, user_settings):
+                self._reply(
+                    reply_token,
+                    [self._text_message(self.texts.get("save_failed", ""))],
+                )
+                return
+            msg = self._text_message(
+                self.texts.get("quiz_answer_set", "").format(answer=value)
+            )
+            self._reply(reply_token, [msg])
+            return
         if self._handle_user_quiz_registration(text, user_key, reply_token):
             return
         if command["type"] == "both":
@@ -326,6 +365,10 @@ class LineHandler:
             message = self._text_message(self.texts.get("quiz_prompt_help", ""))
             self._reply(reply_token, [message])
             return True
+        if command["type"] == "menu_answer":
+            message = self._text_message(self.texts.get("quiz_answer_help", ""))
+            self._reply(reply_token, [message])
+            return True
         if command["type"] == "menu_mode":
             message = self._text_message(self.texts.get("mode_prompt", ""))
             if self.mode_quick_reply_builder:
@@ -420,12 +463,13 @@ class LineHandler:
             user_settings = self._get_user_settings(user_key)
             quiz_mode = user_settings.get("quiz_mode", "intersection")
             quiz_prompt = user_settings.get("quiz_prompt", "")
+            quiz_answer = user_settings.get("quiz_answer", "")
             old_word = self.quiz_store.set_word(
-                user_key, number, word, quiz_mode, quiz_prompt
+                user_key, number, word, quiz_mode, quiz_prompt, quiz_answer
             )
             msg = self._text_message(
                 self._build_set_reply_text(
-                    number, word, old_word, quiz_mode, quiz_prompt
+                    number, word, old_word, quiz_mode, quiz_prompt, quiz_answer
                 )
             )
             self._reply(reply_token, [msg])
@@ -529,7 +573,9 @@ class LineHandler:
                     msg = self._text_message(answer_release_format)
                     self._reply(reply_token, [msg])
                     return
-                stored_word = self.quiz_store.get_word(sender_key, number)
+                stored_item = self.quiz_store.get_quiz_item(sender_key, number)
+                stored_word = stored_item.get("word", "")
+                quiz_answer = stored_item.get("quiz_answer", "")
                 if not stored_word:
                     template = self.texts.get(
                         "unregistered_template", "{number}問目は未登録です。"
@@ -539,6 +585,7 @@ class LineHandler:
                     return
                 sender_settings = self._get_user_settings(sender_key)
                 sender_font = sender_settings.get("font", font_key)
+                answer_text = self._build_answer_release_text(stored_word, quiz_answer)
                 try:
                     if len(stored_word) >= 3:
                         video_path, preview_path = self.generator.generate_union_video(
@@ -553,6 +600,7 @@ class LineHandler:
                         self._reply(
                             reply_token,
                             [
+                                self._text_message(answer_text),
                                 {
                                     "type": "video",
                                     "originalContentUrl": video_url,
@@ -568,7 +616,13 @@ class LineHandler:
                         a_url = self.image_store.get_image_url(
                             "a", stored_word, sender_font, a_path
                         )
-                        self._reply(reply_token, [self._image_message(a_url)])
+                        self._reply(
+                            reply_token,
+                            [
+                                self._text_message(answer_text),
+                                self._image_message(a_url),
+                            ],
+                        )
                         self.image_store.cleanup([q_path, a_path, u_path])
                 except Exception as exc:
                     self.logger.error("LINE answer release error: %s", exc)
@@ -676,7 +730,7 @@ class LineHandler:
                 answer_text = (
                     remaining_text if remaining_text and not tokens else last_token
                 )
-                quiz_status = self._parse_quiz_message(answer_text)
+                quiz_status = self._parse_answer_message(answer_text)
                 if not quiz_status or quiz_status[0] != "ok":
                     answer_format = self.texts.get(
                         "answer_format",
@@ -686,7 +740,9 @@ class LineHandler:
                     self._reply(reply_token, [msg])
                     return
                 _, number, word = quiz_status
-                stored_word = self.quiz_store.get_word(f"user:{target_id}", number)
+                stored_item = self.quiz_store.get_quiz_item(f"user:{target_id}", number)
+                stored_word = stored_item.get("word", "")
+                quiz_answer = stored_item.get("quiz_answer", "")
                 if not stored_word:
                     template = self.texts.get(
                         "unregistered_template", "{number}問目は未登録です。"
@@ -694,7 +750,16 @@ class LineHandler:
                     msg = self._text_message(template.format(number=number))
                     self._reply(reply_token, [msg])
                     return
-                if stored_word and stored_word == word:
+                if not quiz_answer and (len(word) < 2 or len(word) > 8):
+                    answer_format = self.texts.get(
+                        "answer_format",
+                        "解答は以下のフォーマットで送信してください。\n@出題者へのメンション (問題番号).(解答)",
+                    )
+                    msg = self._text_message(answer_format)
+                    self._reply(reply_token, [msg])
+                    return
+                expected_answer = quiz_answer if quiz_answer else stored_word
+                if expected_answer == word:
                     result = self.texts.get("answer_correct", "正解")
                 else:
                     result = self.texts.get("answer_incorrect", "不正解")
@@ -761,6 +826,24 @@ class LineHandler:
             return ("invalid_word", number, word)
         return ("ok", number, word)
 
+    def _parse_answer_message(self, text: str) -> Optional[tuple]:
+        payload = text.strip()
+        if "." not in payload:
+            return None
+        number_text, word = payload.split(".", 1)
+        number_text = number_text.strip()
+        word = word.strip()
+        if not number_text.isdigit():
+            return ("invalid_number", None, None)
+        number = int(number_text)
+        if number < 1 or number > 10:
+            return ("invalid_number", None, None)
+        if not word or len(word) > 20:
+            return ("invalid_length", number, word)
+        if not self.parser._is_allowed_word(word):
+            return ("invalid_word", number, word)
+        return ("ok", number, word)
+
     def _build_set_reply_text(
         self,
         number: int,
@@ -768,6 +851,7 @@ class LineHandler:
         old_word: str,
         quiz_mode: str,
         quiz_prompt: str = "",
+        quiz_answer: str = "",
     ) -> str:
         dispatch_template = self.texts.get(
             "quiz_dispatch_template",
@@ -782,15 +866,16 @@ class LineHandler:
         )
         mode_label = self._quiz_mode_label(quiz_mode)
         prompt_suffix = f"\n問題文:{quiz_prompt}" if quiz_prompt else ""
+        answer_suffix = f"\n解答:{quiz_answer}" if quiz_answer else ""
         if old_word:
             return (
                 f"{number}問目に「{word}」を{mode_label}モードで登録しました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
-                f"{dispatch_text}\n{answer_release}{prompt_suffix}"
+                f"{dispatch_text}\n{answer_release}{prompt_suffix}{answer_suffix}"
             )
         return (
             f"{number}問目に「{word}」を{mode_label}モードで登録しました。\n"
-            f"{dispatch_text}\n{answer_release}{prompt_suffix}"
+            f"{dispatch_text}\n{answer_release}{prompt_suffix}{answer_suffix}"
         )
 
     def _build_quiz_list_text(self, user_key: str) -> str:
@@ -867,6 +952,7 @@ class LineHandler:
         user_settings = self._get_user_settings(user_key)
         quiz_mode = user_settings.get("quiz_mode", "intersection")
         quiz_prompt = user_settings.get("quiz_prompt", "")
+        quiz_answer = user_settings.get("quiz_answer", "")
         for number in range(1, 11):
             if number not in entries:
                 return False
@@ -878,6 +964,9 @@ class LineHandler:
             entry_prompt = (
                 entry.get("quiz_prompt") if isinstance(entry, dict) else None
             ) or quiz_prompt
+            entry_answer = (
+                entry.get("quiz_answer") if isinstance(entry, dict) else None
+            ) or quiz_answer
             if word == unset_label:
                 self.quiz_store.delete_word(user_key, number)
                 continue
@@ -887,10 +976,16 @@ class LineHandler:
                 return False
             if entry_prompt and len(entry_prompt) > 20:
                 return False
+            if entry_answer and "@" in entry_answer:
+                return False
+            if entry_answer and len(entry_answer) > 20:
+                return False
+            if entry_answer and not self.parser._is_allowed_word(entry_answer):
+                return False
             if not self.parser._is_allowed_word(word):
                 return False
             self.quiz_store.set_word(
-                user_key, number, word, entry_mode, entry_prompt
+                user_key, number, word, entry_mode, entry_prompt, entry_answer
             )
         return True
 
@@ -917,15 +1012,23 @@ class LineHandler:
         quiz_mode = user_settings.get("quiz_mode", "intersection")
         font_key = user_settings.get("font", self.default_font_key)
         quiz_prompt = user_settings.get("quiz_prompt", "")
+        quiz_answer = user_settings.get("quiz_answer", "")
         unset_label = self.texts.get("quiz_unset", "未設定")
         prompt_text = quiz_prompt if quiz_prompt else unset_label
+        answer_text = quiz_answer if quiz_answer else unset_label
         font_label = self._font_label(font_key)
         return (
             "【現在の設定】\n"
             f"出題モード: {self._quiz_mode_label(quiz_mode)}\n"
             f"フォント: {font_label}\n"
-            f"問題文: {prompt_text}"
+            f"問題文: {prompt_text}\n"
+            f"解答: {answer_text}"
         )
+
+    def _build_answer_release_text(self, word: str, quiz_answer: str) -> str:
+        if quiz_answer:
+            return f"合成した文字: {word}\n解答: {quiz_answer}"
+        return f"合成した文字: {word}"
 
     def _resolve_quiz_prompt(self, quiz_mode: str, quiz_prompt: str) -> str:
         if quiz_prompt:

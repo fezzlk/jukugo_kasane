@@ -114,7 +114,7 @@ def build_line_usage_text(bot_name: str) -> str:
         "・正誤判定: グループで「@(出題者) + (問題番号).(解答)」\n"
         "\n"
         "【設定機能】\n"
-        "出題モード（共通部分/和集合）とフォントを変更できます。\n"
+        "出題モード（共通部分/和集合）とフォント、問題文、解答を変更できます。\n"
         "設定: 「#設定」と送信。\n"
         "\n"
         "※ 画像生成には時間がかかる場合があります。"
@@ -160,6 +160,10 @@ def build_line_settings_quick_reply() -> dict:
         {
             "type": "action",
             "action": {"type": "message", "label": "問題文", "text": "#問題文"},
+        },
+        {
+            "type": "action",
+            "action": {"type": "message", "label": "解答", "text": "#解答"},
         },
     ]
     return {"items": items}
@@ -239,6 +243,11 @@ line_texts = {
     "quiz_prompt_invalid_char": "問題文に@は使用できません。",
     "quiz_prompt_too_long": "問題文は20文字以内で指定してください。",
     "quiz_prompt_set": "問題文を「{prompt}」に設定しました。\n設定した値は今後追加された問題に適用されます。",
+    "quiz_answer_help": "解答を設定するには「#解答 〜」と送ってください。",
+    "quiz_answer_invalid_char": "解答に@は使用できません。",
+    "quiz_answer_invalid_word": "解答に使用できない文字が含まれています。",
+    "quiz_answer_too_long": "解答は20文字以内で指定してください。",
+    "quiz_answer_set": "解答を「{answer}」に設定しました。\n設定した値は今後追加された問題に適用されます。",
     "answer_release_format": f"解答発表は「@{line_bot_name} 答え (問題番号)」と送ってください。",
     "bulk_update_success": "問題一覧を更新しました。",
     "bulk_update_failed": "問題一覧の形式が正しくありません。",
@@ -268,6 +277,7 @@ line_keywords = {
     "menu_mode": "出題モード",
     "menu_font": "フォント",
     "prompt": "問題文",
+    "answer": "解答",
     "mode_common": "共通部分",
     "mode_union": "和集合",
     "font_prefix": "font_",

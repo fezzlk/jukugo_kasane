@@ -129,18 +129,24 @@ def _build_handler(
             word,
             quiz_mode="intersection",
             quiz_prompt="",
+            quiz_answer="",
         ):
             old_word = self.get_word(user_id, number)
             self.data.setdefault(user_id, {})[number] = {
                 "word": word,
                 "quiz_mode": quiz_mode,
                 "quiz_prompt": quiz_prompt,
+                "quiz_answer": quiz_answer,
             }
             return old_word
 
         def get_word(self, user_id, number):
             item = self.data.get(user_id, {}).get(number)
             return item.get("word", "") if item else ""
+
+        def get_quiz_item(self, user_id, number):
+            item = self.data.get(user_id, {}).get(number)
+            return dict(item) if item else {}
 
         def get_quiz_item(self, user_id, number):
             item = self.data.get(user_id, {}).get(number)
@@ -215,6 +221,11 @@ def _build_handler(
             "quiz_unset": "未設定",
             "generate_failed": "画像の生成に失敗しました。",
             "quiz_prompt_invalid_char": "PROMPT INVALID",
+            "quiz_answer_help": "ANSWER HELP",
+            "quiz_answer_invalid_char": "ANSWER INVALID",
+            "quiz_answer_invalid_word": "ANSWER INVALID WORD",
+            "quiz_answer_too_long": "ANSWER TOO LONG",
+            "quiz_answer_set": "ANSWER SET {answer}",
             "answer_correct": "CORRECT",
             "answer_incorrect": "INCORRECT",
             "error_prefix": "ERROR: ",
@@ -233,6 +244,8 @@ def _build_handler(
             "menu_usage": "menu_usage",
             "menu_mode": "menu_mode",
             "menu_font": "menu_font",
+            "prompt": "prompt",
+            "answer": "answer",
             "mode_common": "mode_common",
             "mode_union": "mode_union",
             "font_prefix": "font_",
@@ -590,7 +603,7 @@ def test_menu_settings_returns_settings_quick_reply(monkeypatch):
     message = captured["json"]["messages"][0]
     assert (
         message["text"]
-        == "SETTINGS PROMPT\n【現在の設定】\n出題モード: 共通部分\nフォント: デフォルト\n問題文: 未設定"
+        == "SETTINGS PROMPT\n【現在の設定】\n出題モード: 共通部分\nフォント: デフォルト\n問題文: 未設定\n解答: 未設定"
     )
     assert "quickReply" in message
 
@@ -1179,6 +1192,77 @@ def test_group_answer_correct(monkeypatch):
     assert message["text"] == "Testerさん、CORRECTです。"
 
 
+def test_quiz_answer_command_updates_setting(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "#answer かいとう"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert store.data == {"user:u1": {"quiz_answer": "かいとう"}}
+    assert captured["json"]["messages"][0]["text"] == "ANSWER SET かいとう"
+
+
+def test_group_answer_uses_custom_answer(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    handler.quiz_store.set_word(
+        "user:u2", 1, "音楽性", "intersection", "", "かすたむかいとうえ"
+    )
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@user 1.かすたむかいとうえ",
+                    "mention": {"mentionees": [{"userId": "u2"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    message = captured["json"]["messages"][0]
+    assert message["text"] == "Testerさん、CORRECTです。"
+
+
 def test_group_answer_unregistered(monkeypatch):
     store = InMemoryStore()
     generator = DummyGenerator()
@@ -1285,9 +1369,51 @@ def test_group_answer_release_two_chars(monkeypatch):
 
     text, status = handler.handle_callback(body, signature)
     assert status == 200
-    message = captured["json"]["messages"][0]
-    assert message["type"] == "image"
-    assert message["originalContentUrl"].endswith("/a/ab")
+    messages = captured["json"]["messages"]
+    assert messages[0]["type"] == "text"
+    assert messages[0]["text"] == "合成した文字: ab"
+    assert messages[1]["type"] == "image"
+    assert messages[1]["originalContentUrl"].endswith("/a/ab")
+
+
+def test_group_answer_release_includes_custom_answer(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None, bot_user_id="bot")
+    handler.quiz_store.set_word("user:u1", 1, "ab", "intersection", "", "かいとう")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "@bot 答え 1",
+                    "mention": {"mentionees": [{"userId": "bot"}]},
+                },
+                "source": {"type": "group", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    messages = captured["json"]["messages"]
+    assert messages[0]["type"] == "text"
+    assert messages[0]["text"] == "合成した文字: ab\n解答: かいとう"
+    assert messages[1]["type"] == "image"
+    assert messages[1]["originalContentUrl"].endswith("/a/ab")
 
 
 def test_group_answer_release_video(monkeypatch):
@@ -1323,9 +1449,11 @@ def test_group_answer_release_video(monkeypatch):
 
     text, status = handler.handle_callback(body, signature)
     assert status == 200
-    message = captured["json"]["messages"][0]
-    assert message["type"] == "video"
-    assert message["originalContentUrl"].endswith("/v/abcd.mp4")
+    messages = captured["json"]["messages"]
+    assert messages[0]["type"] == "text"
+    assert messages[0]["text"] == "合成した文字: abcd"
+    assert messages[1]["type"] == "video"
+    assert messages[1]["originalContentUrl"].endswith("/v/abcd.mp4")
 
 
 def test_bulk_quiz_list_update(monkeypatch):

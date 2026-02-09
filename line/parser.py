@@ -63,6 +63,13 @@ class LineCommandParser:
                 return {"type": "menu_prompt"}
             return {"type": "quiz_prompt", "value": prompt_value.strip()}
 
+        answer_keyword = str(self.keywords.get("answer", ""))
+        if has_prefix and answer_keyword and stripped.startswith(answer_keyword):
+            _, _, answer_value = stripped.partition(" ")
+            if not answer_value.strip():
+                return {"type": "menu_answer"}
+            return {"type": "quiz_answer", "value": answer_value.strip()}
+
         mode_common = str(self.keywords.get("mode_common", ""))
         if has_prefix and mode_common and stripped == mode_common:
             return {"type": "mode_common"}

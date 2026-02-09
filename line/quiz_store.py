@@ -22,6 +22,7 @@ class SqliteQuizStore:
                     word TEXT NOT NULL,
                     quiz_mode TEXT NOT NULL DEFAULT 'intersection',
                     quiz_prompt TEXT NOT NULL DEFAULT '',
+                    quiz_answer TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (user_id, number)
                 )
@@ -39,6 +40,10 @@ class SqliteQuizStore:
                 conn.execute(
                     "ALTER TABLE quiz_items ADD COLUMN quiz_prompt TEXT NOT NULL DEFAULT ''"
                 )
+            if "quiz_answer" not in columns:
+                conn.execute(
+                    "ALTER TABLE quiz_items ADD COLUMN quiz_answer TEXT NOT NULL DEFAULT ''"
+                )
 
     def _connect(self):
         conn = sqlite3.connect(self.db_path)
@@ -52,19 +57,29 @@ class SqliteQuizStore:
         word: str,
         quiz_mode: str = "intersection",
         quiz_prompt: str = "",
+        quiz_answer: str = "",
     ) -> str:
         old_word = self.get_word(user_id, number)
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO quiz_items (user_id, number, word, quiz_mode, quiz_prompt, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO quiz_items (user_id, number, word, quiz_mode, quiz_prompt, quiz_answer, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, number)
                 DO UPDATE SET word=excluded.word, quiz_mode=excluded.quiz_mode,
                 quiz_prompt=excluded.quiz_prompt,
+                quiz_answer=excluded.quiz_answer,
                 updated_at=excluded.updated_at
                 """,
-                (user_id, number, word, quiz_mode, quiz_prompt, self._now()),
+                (
+                    user_id,
+                    number,
+                    word,
+                    quiz_mode,
+                    quiz_prompt,
+                    quiz_answer,
+                    self._now(),
+                ),
             )
         return old_word or ""
 
@@ -75,7 +90,7 @@ class SqliteQuizStore:
     def get_quiz_item(self, user_id: str, number: int) -> dict:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT word, quiz_mode, quiz_prompt FROM quiz_items WHERE user_id=? AND number=?",
+                "SELECT word, quiz_mode, quiz_prompt, quiz_answer FROM quiz_items WHERE user_id=? AND number=?",
                 (user_id, number),
             ).fetchone()
         if not row:
@@ -84,6 +99,7 @@ class SqliteQuizStore:
             "word": row["word"],
             "quiz_mode": row["quiz_mode"] or "intersection",
             "quiz_prompt": row["quiz_prompt"] or "",
+            "quiz_answer": row["quiz_answer"] or "",
         }
 
     def delete_word(self, user_id: str, number: int) -> None:
@@ -107,7 +123,7 @@ class SqliteQuizStore:
     def list_quiz_items(self, user_id: str) -> dict:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT number, word, quiz_mode, quiz_prompt FROM quiz_items WHERE user_id=?",
+                "SELECT number, word, quiz_mode, quiz_prompt, quiz_answer FROM quiz_items WHERE user_id=?",
                 (user_id,),
             ).fetchall()
         result = {}
@@ -116,6 +132,7 @@ class SqliteQuizStore:
                 "word": row["word"],
                 "quiz_mode": row["quiz_mode"] or "intersection",
                 "quiz_prompt": row["quiz_prompt"] or "",
+                "quiz_answer": row["quiz_answer"] or "",
             }
         return result
 
@@ -151,6 +168,7 @@ class DatastoreQuizStore:
         word: str,
         quiz_mode: str = "intersection",
         quiz_prompt: str = "",
+        quiz_answer: str = "",
     ) -> str:
         old_word = self.get_word(user_id, number)
         from google.cloud import datastore
@@ -163,6 +181,7 @@ class DatastoreQuizStore:
                 "word": word,
                 "quiz_mode": quiz_mode,
                 "quiz_prompt": quiz_prompt,
+                "quiz_answer": quiz_answer,
                 "updated_at": datetime.utcnow(),
             }
         )
@@ -181,6 +200,7 @@ class DatastoreQuizStore:
             "word": entity.get("word", "") or "",
             "quiz_mode": entity.get("quiz_mode", "intersection") or "intersection",
             "quiz_prompt": entity.get("quiz_prompt", "") or "",
+            "quiz_answer": entity.get("quiz_answer", "") or "",
         }
 
     def delete_word(self, user_id: str, number: int) -> None:
@@ -216,5 +236,6 @@ class DatastoreQuizStore:
                 "word": word,
                 "quiz_mode": entity.get("quiz_mode", "intersection") or "intersection",
                 "quiz_prompt": entity.get("quiz_prompt", "") or "",
+                "quiz_answer": entity.get("quiz_answer", "") or "",
             }
         return result
