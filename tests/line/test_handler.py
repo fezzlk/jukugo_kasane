@@ -14,8 +14,6 @@ from line.handler import LineHandler
 # - "#menu_register" -> register format help
 # - "#menu_list" -> quiz list output
 # - "#menu_settings" -> settings quick reply
-# - "#menu_mode" -> mode quick reply
-# - "#mode_union" -> quiz_mode=union
 # - "#menu_font" -> font quick reply
 # - "#menu_usage" -> usage text
 # - "abc" (len!=2..8) -> NOT TWO CHARS
@@ -189,9 +187,6 @@ def _build_handler(
             "generate_prompt": "SEND TWO CHARS",
             "register_help": "REGISTER FORMAT",
             "settings_prompt": "SETTINGS PROMPT",
-            "mode_prompt": "MODE PROMPT",
-            "mode_set_common": "MODE COMMON\n設定した値は今後追加された問題に適用されます。",
-            "mode_set_union": "MODE UNION\n設定した値は今後追加された問題に適用されます。",
             "font_prompt": "FONT PROMPT",
             "settings_updated": "UPDATED {settings}",
             "font_set": "FONT {font}",
@@ -210,7 +205,6 @@ def _build_handler(
             "quiz_format": "@文字合成ボット (問題番号)",
             "quiz_dispatch_template": "グループで「@文字合成ボット {number}」と送ると出題されます。",
             "quiz_dispatch_list": "グループで「@文字合成ボット (問題番号)」と送ると出題されます。",
-            "quiz_mode_note": "共通部分/和集合どちらで出題するかは「#設定」から変更できます。",
             "answer_release_format": "解答発表は「@文字合成ボット 答え (問題番号)」と送ってください。",
             "bulk_update_success": "BULK OK",
             "bulk_update_failed": "BULK NG",
@@ -226,6 +220,10 @@ def _build_handler(
             "quiz_answer_invalid_word": "ANSWER INVALID WORD",
             "quiz_answer_too_long": "ANSWER TOO LONG",
             "quiz_answer_set": "ANSWER SET {answer}",
+            "quiz_mode_invalid": "MODE INVALID",
+            "quiz_format_help": "FORMAT HELP",
+            "quiz_format_details": "FORMAT DETAILS",
+            "quiz_format_invalid": "FORMAT INVALID",
             "answer_correct": "CORRECT",
             "answer_incorrect": "INCORRECT",
             "error_prefix": "ERROR: ",
@@ -242,12 +240,7 @@ def _build_handler(
             "menu_list": "menu_list",
             "menu_settings": "menu_settings",
             "menu_usage": "menu_usage",
-            "menu_mode": "menu_mode",
             "menu_font": "menu_font",
-            "prompt": "prompt",
-            "answer": "answer",
-            "mode_common": "mode_common",
-            "mode_union": "mode_union",
             "font_prefix": "font_",
         },
         quick_reply_builder=quick_reply_builder,
@@ -601,49 +594,7 @@ def test_menu_settings_returns_settings_quick_reply(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     message = captured["json"]["messages"][0]
-    assert (
-        message["text"]
-        == "SETTINGS PROMPT\n【現在の設定】\n出題モード: 共通部分\nフォント: デフォルト\n問題文: 未設定\n解答: 未設定"
-    )
-    assert "quickReply" in message
-
-
-def test_menu_mode_returns_mode_quick_reply(monkeypatch):
-    store = InMemoryStore()
-    generator = DummyGenerator()
-    logger = DummyLogger()
-    captured = {}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        captured["json"] = json
-        return DummyResponse()
-
-    monkeypatch.setattr("line.reply.requests.post", fake_post)
-
-    handler = _build_handler(
-        store,
-        generator,
-        logger,
-        lambda: None,
-        mode_builder=lambda: {"items": [{"type": "action"}]},
-    )
-    payload = {
-        "events": [
-            {
-                "type": "message",
-                "replyToken": "rt",
-                "message": {"type": "text", "text": "#menu_mode"},
-                "source": {"type": "user", "userId": "u1"},
-            }
-        ]
-    }
-    body = json.dumps(payload).encode("utf-8")
-    signature = _sign(body, "secret")
-
-    text, status = handler.handle_callback(body, signature)
-    assert status == 200
-    message = captured["json"]["messages"][0]
-    assert message["text"] == "MODE PROMPT"
+    assert message["text"] == "SETTINGS PROMPT\n【現在の設定】\nフォント: デフォルト"
     assert "quickReply" in message
 
 
@@ -684,41 +635,6 @@ def test_menu_font_returns_font_quick_reply(monkeypatch):
     message = captured["json"]["messages"][0]
     assert message["text"] == "FONT PROMPT"
     assert "quickReply" in message
-
-
-def test_mode_union_sets_setting(monkeypatch):
-    store = InMemoryStore()
-    generator = DummyGenerator()
-    logger = DummyLogger()
-    captured = {}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        captured["json"] = json
-        return DummyResponse()
-
-    monkeypatch.setattr("line.reply.requests.post", fake_post)
-
-    handler = _build_handler(store, generator, logger, lambda: None)
-    payload = {
-        "events": [
-            {
-                "type": "message",
-                "replyToken": "rt",
-                "message": {"type": "text", "text": "#mode_union"},
-                "source": {"type": "user", "userId": "u1"},
-            }
-        ]
-    }
-    body = json.dumps(payload).encode("utf-8")
-    signature = _sign(body, "secret")
-
-    text, status = handler.handle_callback(body, signature)
-    assert status == 200
-    assert store.data["user:u1"]["quiz_mode"] == "union"
-    assert (
-        captured["json"]["messages"][0]["text"]
-        == "MODE UNION\n設定した値は今後追加された問題に適用されます。"
-    )
 
 
 def test_menu_usage_returns_usage(monkeypatch):
@@ -875,6 +791,44 @@ def test_quiz_register_with_three_chars(monkeypatch):
     assert status == 200
     assert handler.quiz_store.data["user:u1"][1]["word"] == "音楽性"
     assert handler.quiz_store.data["user:u1"][1]["quiz_mode"] == "intersection"
+
+
+def test_quiz_register_with_details(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "1.ab\n【問題文】もんだい\n【解答】かいとう\n【出題モード】和集合",
+                },
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    item = handler.quiz_store.data["user:u1"][1]
+    assert item["word"] == "ab"
+    assert item["quiz_mode"] == "union"
+    assert item["quiz_prompt"] == "もんだい"
+    assert item["quiz_answer"] == "かいとう"
 
 
 def test_quiz_register_invalid_word(monkeypatch):
@@ -1190,38 +1144,6 @@ def test_group_answer_correct(monkeypatch):
     assert status == 200
     message = captured["json"]["messages"][0]
     assert message["text"] == "Testerさん、CORRECTです。"
-
-
-def test_quiz_answer_command_updates_setting(monkeypatch):
-    store = InMemoryStore()
-    generator = DummyGenerator()
-    logger = DummyLogger()
-    captured = {}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        captured["json"] = json
-        return DummyResponse()
-
-    monkeypatch.setattr("line.reply.requests.post", fake_post)
-
-    handler = _build_handler(store, generator, logger, lambda: None)
-    payload = {
-        "events": [
-            {
-                "type": "message",
-                "replyToken": "rt",
-                "message": {"type": "text", "text": "#answer かいとう"},
-                "source": {"type": "user", "userId": "u1"},
-            }
-        ]
-    }
-    body = json.dumps(payload).encode("utf-8")
-    signature = _sign(body, "secret")
-
-    text, status = handler.handle_callback(body, signature)
-    assert status == 200
-    assert store.data == {"user:u1": {"quiz_answer": "かいとう"}}
-    assert captured["json"]["messages"][0]["text"] == "ANSWER SET かいとう"
 
 
 def test_group_answer_uses_custom_answer(monkeypatch):
