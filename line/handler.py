@@ -187,8 +187,11 @@ class LineHandler:
                 )
                 return
             summary = self._build_settings_summary(user_settings)
+            display_settings = dict(user_settings)
+            if "font" in display_settings:
+                display_settings["font"] = self._font_label(display_settings["font"])
             msg = self._text_message(
-                self.texts.get("settings_updated", "").format(settings=user_settings)
+                self.texts.get("settings_updated", "").format(settings=display_settings)
                 + "\n"
                 + summary,
                 include_quick_reply=True,
@@ -209,8 +212,9 @@ class LineHandler:
                     [self._text_message(self.texts.get("save_failed", ""))],
                 )
                 return
+            font_label = self._font_label(font_key)
             msg = self._text_message(
-                self.texts.get("font_set", "").format(font=font_key),
+                self.texts.get("font_set", "").format(font=font_label),
                 include_quick_reply=True,
             )
             self._reply(reply_token, [msg])
@@ -307,7 +311,11 @@ class LineHandler:
                 self._reply(reply_token, [msg])
             return True
         if command["type"] == "menu_settings":
-            message = self._text_message(self.texts.get("settings_prompt", ""))
+            user_settings = self._get_user_settings(user_key)
+            summary = self._build_settings_summary(user_settings)
+            message = self._text_message(
+                self.texts.get("settings_prompt", "") + "\n" + summary
+            )
             if self.settings_quick_reply_builder:
                 settings_quick = self.settings_quick_reply_builder()
                 if settings_quick:
@@ -381,8 +389,9 @@ class LineHandler:
                 [self._text_message(self.texts.get("save_failed", ""))],
             )
             return True
+        font_label = self._font_label(font_key)
         msg = self._text_message(
-            self.texts.get("font_set", "").format(font=font_key),
+            self.texts.get("font_set", "").format(font=font_label),
             include_quick_reply=True,
         )
         self._reply(reply_token, [msg])
@@ -888,16 +897,33 @@ class LineHandler:
     def _quiz_mode_label(self, quiz_mode: str) -> str:
         return "和集合" if quiz_mode == "union" else "共通部分"
 
+    def _font_label(self, font_key: str) -> str:
+        default_key = "default"
+        if hasattr(self.generator, "get_default_font_key"):
+            default_key = self.generator.get_default_font_key()
+        default_label = "デフォルト"
+        if default_key == "mincho":
+            default_label = "明朝(デフォルト)"
+        font_labels = {
+            "default": default_label,
+            "mincho": "明朝",
+            "monogothic": "源暎ゴシック",
+            "hiragino": "ヒラギノ",
+            "dejavu": "DejaVuSans",
+        }
+        return font_labels.get(font_key, font_key)
+
     def _build_settings_summary(self, user_settings: dict) -> str:
         quiz_mode = user_settings.get("quiz_mode", "intersection")
         font_key = user_settings.get("font", self.default_font_key)
         quiz_prompt = user_settings.get("quiz_prompt", "")
         unset_label = self.texts.get("quiz_unset", "未設定")
         prompt_text = quiz_prompt if quiz_prompt else unset_label
+        font_label = self._font_label(font_key)
         return (
             "【現在の設定】\n"
             f"出題モード: {self._quiz_mode_label(quiz_mode)}\n"
-            f"フォント: {font_key}\n"
+            f"フォント: {font_label}\n"
             f"問題文: {prompt_text}"
         )
 

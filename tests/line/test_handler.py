@@ -55,6 +55,9 @@ class DummyGenerator:
             raise ValueError("invalid font")
         return text
 
+    def get_default_font_key(self):
+        return "default"
+
 
 class InMemoryStore:
     def __init__(self):
@@ -388,7 +391,7 @@ def test_font_command_updates_user_setting(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     assert store.data == {"user:u1": {"font": "mincho"}}
-    assert "FONT mincho" in captured["json"]["messages"][0]["text"]
+    assert "FONT 明朝" in captured["json"]["messages"][0]["text"]
 
 
 def test_setting_command_updates_font(monkeypatch):
@@ -585,7 +588,10 @@ def test_menu_settings_returns_settings_quick_reply(monkeypatch):
     text, status = handler.handle_callback(body, signature)
     assert status == 200
     message = captured["json"]["messages"][0]
-    assert message["text"] == "SETTINGS PROMPT"
+    assert (
+        message["text"]
+        == "SETTINGS PROMPT\n【現在の設定】\n出題モード: 共通部分\nフォント: デフォルト\n問題文: 未設定"
+    )
     assert "quickReply" in message
 
 
