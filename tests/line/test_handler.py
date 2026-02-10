@@ -829,6 +829,11 @@ def test_quiz_register_with_details(monkeypatch):
     assert item["quiz_prompt"] == "もんだい"
     assert item["quiz_answer"] == "かいとう"
 
+    # Check that the reply message includes the custom prompt and answer
+    msg = captured["json"]["messages"][0]["text"]
+    assert "問題文: もんだい" in msg
+    assert "解答: かいとう" in msg
+
 
 def test_quiz_register_invalid_word(monkeypatch):
     store = InMemoryStore()
