@@ -16,6 +16,6 @@ jobs:
     if: github.event.label.name == 'fix-me'
     uses: OpenHands/OpenHands/.github/workflows/openhands-resolver.yml@main
     with:
-      LLM_MODEL: openai/gpt-5.2
+      LLM_MODEL: openai/gpt-4.1
     secrets:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
