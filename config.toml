@@ -1,0 +1,5 @@
+[llm]
+# Reduce request size to avoid TPM limit errors.
+max_input_tokens = 24000
+max_output_tokens = 2000
+max_message_chars = 20000
