@@ -436,7 +436,7 @@ class LineHandler:
             )
             messages = [
                 self._text_message(
-                    self._build_set_reply_text(number, word, old_word, quiz_mode)
+                    self._build_set_reply_text(number, word, old_word, quiz_mode, quiz_prompt, quiz_answer)
                 )
             ]
             format_help = self.texts.get("quiz_format_help", "")
@@ -881,6 +881,8 @@ class LineHandler:
         word: str,
         old_word: str,
         quiz_mode: str,
+        quiz_prompt: str = "",
+        quiz_answer: str = "",
     ) -> str:
         dispatch_template = self.texts.get(
             "quiz_dispatch_template",
@@ -894,16 +896,28 @@ class LineHandler:
             "答え (問題番号)」と送ってください。",
         )
         mode_label = self._quiz_mode_label(quiz_mode)
+        prompt_text = f"問題文: {quiz_prompt}" if quiz_prompt else ""
+        answer_text = f"解答: {quiz_answer}" if quiz_answer else ""
+        extra = ""
+        if prompt_text:
+            extra += prompt_text
+        if answer_text:
+            if extra:
+                extra += "\n"
+            extra += answer_text
         if old_word:
             return (
                 f"{number}問目に「{word}」を{mode_label}モードで登録しました。"
                 f"元の熟語「{old_word}」を削除しました。\n"
                 f"{dispatch_text}\n{answer_release}"
+                + (f"\n{extra}" if extra else "")
             )
         return (
             f"{number}問目に「{word}」を{mode_label}モードで登録しました。\n"
             f"{dispatch_text}\n{answer_release}"
+            + (f"\n{extra}" if extra else "")
         )
+
 
     def _build_quiz_list_text(self, user_key: str) -> str:
         if hasattr(self.quiz_store, "list_quiz_items"):
