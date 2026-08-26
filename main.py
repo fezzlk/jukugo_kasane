@@ -14,6 +14,7 @@ from image_generator import ImageGenerator
 from line import store as line_store
 from line.handler import LineHandler
 from line.image_store import GcsImageStore, LocalImageStore
+from line.parser import LineCommandParser
 from line.profile import LineProfileClient
 from line.quiz_store import DatastoreQuizStore, SqliteQuizStore
 
@@ -39,6 +40,13 @@ line_bot_name = os.getenv("LINE_BOT_NAME", "").strip() or "文字合成ボット
 line_quiz_db_path = os.getenv("LINE_QUIZ_DB_PATH", "line/quiz.db").strip()
 line_quiz_store_mode = os.getenv("LINE_QUIZ_STORE", "sqlite").strip().lower()
 line_firestore_project = os.getenv("LINE_FIRESTORE_PROJECT", "").strip()
+service_provider_name = os.getenv("SERVICE_PROVIDER_NAME", "fezzlk").strip()
+contact_form_url = os.getenv("CONTACT_FORM_URL", "").strip()
+line_ng_words = frozenset(
+    word.strip().lower()
+    for word in os.getenv("KASANE_NG_WORDS", "").split(",")
+    if word.strip()
+)
 
 def _mask_presence(value: str) -> str:
     return "set" if value else "missing"
@@ -225,6 +233,13 @@ line_texts = {
     "error_prefix": "エラー: ",
     "invalid_signature": "Invalid signature",
     "bad_request": "Bad Request",
+    "quiz_prompt_invalid_word": "問題文に使用できない言葉が含まれています。",
+    "quiz_answer_invalid_word": "解答に使用できない言葉が含まれています。",
+    "delete_all_confirm_prompt": (
+        "登録した出題文字・問題文・解答などのデータをすべて削除します。この操作は取り消せません。\n"
+        "実行する場合は「#データ削除 実行」と送信してください。"
+    ),
+    "delete_all_done": "データを削除しました（{count}件）。",
 }
 
 line_keywords = {
@@ -239,6 +254,8 @@ line_keywords = {
     "menu_usage": "使い方",
     "menu_font": "フォント",
     "font_prefix": "font_",
+    "delete_all": "データ削除",
+    "delete_all_confirm": "データ削除 実行",
 }
 
 if line_image_storage == "gcs":
@@ -252,6 +269,8 @@ else:
     line_quiz_store = SqliteQuizStore(line_quiz_db_path, logger)
 if not line_bot_user_id:
     logger.warning("LINE_BOT_USER_ID is missing; group quiz is disabled.")
+
+line_parser = LineCommandParser(line_keywords, ng_words=line_ng_words)
 
 line_handler = LineHandler(
     channel_secret=line_channel_secret,
@@ -271,6 +290,7 @@ line_handler = LineHandler(
     mode_quick_reply_builder=build_line_mode_quick_reply,
     font_quick_reply_builder=build_line_font_quick_reply,
     profile_client=LineProfileClient(line_channel_access_token, logger),
+    parser=line_parser,
 )
 
 
@@ -278,6 +298,26 @@ line_handler = LineHandler(
 def index():
     """メインページ"""
     return render_template("index.html", font_options=generator.get_font_keys())
+
+
+@app.route("/terms")
+def terms():
+    """利用規約"""
+    return render_template(
+        "legal/terms.html",
+        service_provider_name=service_provider_name,
+        contact_form_url=contact_form_url,
+    )
+
+
+@app.route("/privacy")
+def privacy():
+    """プライバシーポリシー"""
+    return render_template(
+        "legal/privacy.html",
+        service_provider_name=service_provider_name,
+        contact_form_url=contact_form_url,
+    )
 
 
 @app.route("/<word>")
