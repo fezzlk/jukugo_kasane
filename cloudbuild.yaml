@@ -1,0 +1,45 @@
+# ============================================================
+# Cloud Build 設定
+# ============================================================
+# デプロイは このファイル + Cloud Build トリガー (kasane-deploy) 経由のみ。
+# GCP Console の「Cloud Run にデプロイ」機能で別トリガーを作成しないこと。
+# ============================================================
+
+steps:
+  # Step 1: Docker build
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build"
+    args:
+      - "build"
+      - "-t=us-central1-docker.pkg.dev/kasane-424615/cloud-run-source-deploy/kasane:$COMMIT_SHA"
+      - "-t=us-central1-docker.pkg.dev/kasane-424615/cloud-run-source-deploy/kasane:latest"
+      - "."
+
+  # Step 2: Push image to Artifact Registry
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push"
+    waitFor: ["build"]
+    args:
+      - "push"
+      - "--all-tags"
+      - "us-central1-docker.pkg.dev/kasane-424615/cloud-run-source-deploy/kasane"
+
+  # Step 3: Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy"
+    waitFor: ["push"]
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "kasane"
+      - "--image=us-central1-docker.pkg.dev/kasane-424615/cloud-run-source-deploy/kasane:$COMMIT_SHA"
+      - "--region=us-central1"
+      - "--min-instances=0"
+      - "--timeout=300"
+      - "--no-cpu-boost"
+      - "--quiet"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitutionOption: ALLOW_LOOSE
