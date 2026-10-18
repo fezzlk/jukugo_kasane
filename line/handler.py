@@ -87,6 +87,15 @@ class LineHandler:
     def _handle_event(self, event: dict) -> None:
         """Route a single event to the appropriate handler."""
         event_type = event.get("type")
+
+        if event_type == "unfollow":
+            user_key = self._get_user_key(event)
+            try:
+                self._delete_all_user_data(user_key)
+            except Exception as exc:
+                self.logger.error("Failed to delete data on unfollow: %s", exc)
+            return
+
         reply_token = event.get("replyToken")
         if not reply_token:
             return
@@ -131,6 +140,17 @@ class LineHandler:
             value = text[len("font_") :].strip()
             if value:
                 command = {"type": "font", "value": value}
+        if command["type"] == "delete_all_confirm":
+            msg = self._text_message(self.texts.get("delete_all_confirm_prompt", ""))
+            self._reply(reply_token, [msg])
+            return
+        if command["type"] == "delete_all_execute":
+            count = self._delete_all_user_data(user_key)
+            msg = self._text_message(
+                self.texts.get("delete_all_done", "").format(count=count)
+            )
+            self._reply(reply_token, [msg])
+            return
         if self._handle_menu_commands(command, user_key, source_type, reply_token):
             return
         if self._handle_user_quiz_registration(text, user_key, reply_token):
@@ -394,6 +414,15 @@ class LineHandler:
         if status == "invalid_prompt_length":
             msg = self._text_message(
                 self.texts.get("quiz_prompt_too_long", "問題文は20文字以内で指定してください。")
+            )
+            self._reply(reply_token, [msg])
+            return True
+        if status == "invalid_prompt_word":
+            msg = self._text_message(
+                self.texts.get(
+                    "quiz_prompt_invalid_word",
+                    "問題文に使用できない言葉が含まれています。",
+                )
             )
             self._reply(reply_token, [msg])
             return True
@@ -779,6 +808,19 @@ class LineHandler:
         settings = self.settings_store.load_settings()
         return settings.get(user_key, {})
 
+    def _delete_all_user_data(self, user_key: str) -> int:
+        """Delete all registered quiz items and settings for a user key."""
+        items = self.quiz_store.list_quiz_items(user_key)
+        for number in list(items.keys()):
+            self.quiz_store.delete_word(user_key, number)
+
+        settings = self.settings_store.load_settings()
+        if user_key in settings:
+            del settings[user_key]
+            self.settings_store.save_settings(settings)
+
+        return len(items)
+
     def _save_user_settings(self, user_key: str, user_settings: dict) -> bool:
         """Persist settings for a user key."""
         settings = self.settings_store.load_settings()
@@ -830,6 +872,8 @@ class LineHandler:
                     return {"status": "invalid_prompt_char"}
                 if len(quiz_prompt) > 20:
                     return {"status": "invalid_prompt_length"}
+                if quiz_prompt and self.parser.contains_ng_word(quiz_prompt):
+                    return {"status": "invalid_prompt_word"}
                 continue
             if line.startswith("【解答】"):
                 quiz_answer = line[len("【解答】") :].strip()
@@ -837,6 +881,8 @@ class LineHandler:
                     return {"status": "invalid_answer_char"}
                 if len(quiz_answer) > 20:
                     return {"status": "invalid_answer_length"}
+                if quiz_answer and self.parser.contains_ng_word(quiz_answer):
+                    return {"status": "invalid_answer_word"}
                 continue
             if line.startswith("【出題モード】"):
                 mode_label = line[len("【出題モード】") :].strip()

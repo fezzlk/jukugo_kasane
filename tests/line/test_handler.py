@@ -4,6 +4,7 @@ import hmac
 import json
 
 from line.handler import LineHandler
+from line.parser import LineCommandParser
 
 # Test input/behavior overview:
 # - "ab" -> text + Q image + U image + A image (2-char flow)
@@ -99,6 +100,7 @@ def _build_handler(
     mode_builder=None,
     font_builder=None,
     bot_user_id="bot",
+    ng_words=frozenset(),
 ):
     class DummyImageStore:
         def __init__(self):
@@ -228,6 +230,10 @@ def _build_handler(
             "error_prefix": "ERROR: ",
             "invalid_signature": "INVALID",
             "bad_request": "BAD",
+            "quiz_prompt_invalid_word": "PROMPT NG WORD",
+            "quiz_answer_invalid_word": "ANSWER NG WORD",
+            "delete_all_confirm_prompt": "CONFIRM DELETE ALL",
+            "delete_all_done": "DELETED {count}",
         },
         keywords={
             "help": ["help"],
@@ -241,6 +247,8 @@ def _build_handler(
             "menu_usage": "menu_usage",
             "menu_font": "menu_font",
             "font_prefix": "font_",
+            "delete_all": "delete_all",
+            "delete_all_confirm": "delete_all_confirm",
         },
         quick_reply_builder=quick_reply_builder,
         default_font_key="default",
@@ -251,6 +259,24 @@ def _build_handler(
         font_quick_reply_builder=font_builder,
         bot_user_id=bot_user_id,
         profile_client=DummyProfileClient(),
+        parser=LineCommandParser(
+            {
+                "help": ["help"],
+                "setting": "set",
+                "font": "font",
+                "list": "list",
+                "menu_generate": "menu_generate",
+                "menu_register": "menu_register",
+                "menu_list": "menu_list",
+                "menu_settings": "menu_settings",
+                "menu_usage": "menu_usage",
+                "menu_font": "menu_font",
+                "font_prefix": "font_",
+                "delete_all": "delete_all",
+                "delete_all_confirm": "delete_all_confirm",
+            },
+            ng_words=ng_words,
+        ),
     )
 
 
@@ -1415,3 +1441,167 @@ def test_bulk_quiz_list_update(monkeypatch):
     assert handler.quiz_store.get_quiz_item("user:u1", 1)["quiz_answer"] == "かいとう1"
     assert handler.quiz_store.get_word("user:u1", 2) == ""
     assert handler.quiz_store.get_word("user:u1", 3) == "ef"
+
+
+def test_delete_all_command_prompts_confirmation_without_deleting(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    handler.quiz_store.set_word("user:u1", 1, "ab", "intersection")
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "#delete_all"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "CONFIRM DELETE ALL"
+    assert handler.quiz_store.get_word("user:u1", 1) == "ab"
+
+
+def test_delete_all_confirm_deletes_quiz_items_and_settings(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(store, generator, logger, lambda: None)
+    handler.quiz_store.set_word("user:u1", 1, "ab", "intersection")
+    handler.quiz_store.set_word("user:u1", 2, "cd", "intersection")
+    store.data["user:u1"] = {"font": "mincho"}
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "#delete_all_confirm"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "DELETED 2"
+    assert handler.quiz_store.list_quiz_items("user:u1") == {}
+    assert "user:u1" not in store.load_settings()
+
+
+def test_unfollow_event_deletes_all_user_data():
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    handler = _build_handler(store, generator, logger, lambda: None)
+    handler.quiz_store.set_word("user:u1", 1, "ab", "intersection")
+    store.data["user:u1"] = {"font": "mincho"}
+    payload = {
+        "events": [
+            {
+                "type": "unfollow",
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert handler.quiz_store.list_quiz_items("user:u1") == {}
+    assert "user:u1" not in store.load_settings()
+
+
+def test_ng_word_in_registered_word_is_rejected(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(
+        store, generator, logger, lambda: None, ng_words=frozenset({"ばか"})
+    )
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {"type": "text", "text": "1.ばか"},
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "INVALID WORD"
+    assert handler.quiz_store.get_word("user:u1", 1) == ""
+
+
+def test_ng_word_in_quiz_prompt_is_rejected(monkeypatch):
+    store = InMemoryStore()
+    generator = DummyGenerator()
+    logger = DummyLogger()
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("line.reply.requests.post", fake_post)
+
+    handler = _build_handler(
+        store, generator, logger, lambda: None, ng_words=frozenset({"ばか"})
+    )
+    payload = {
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "rt",
+                "message": {
+                    "type": "text",
+                    "text": "1.音楽性\n【問題文】ばかとは何か",
+                },
+                "source": {"type": "user", "userId": "u1"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = _sign(body, "secret")
+
+    text, status = handler.handle_callback(body, signature)
+    assert status == 200
+    assert captured["json"]["messages"][0]["text"] == "PROMPT NG WORD"
+    assert handler.quiz_store.get_word("user:u1", 1) == ""

@@ -1,9 +1,10 @@
 class LineCommandParser:
     """Parse incoming text into structured LINE bot commands."""
 
-    def __init__(self, keywords: dict):
-        """Create a parser with keyword mappings."""
+    def __init__(self, keywords: dict, ng_words: frozenset = frozenset()):
+        """Create a parser with keyword mappings and an NG-word denylist."""
         self.keywords = keywords
+        self.ng_words = ng_words
 
     def parse(self, text: str) -> dict:
         """Parse text into a command dictionary."""
@@ -27,6 +28,14 @@ class LineCommandParser:
         list_candidates = [str(item) for item in list_candidates if str(item)]
         if has_prefix and stripped in list_candidates:
             return {"type": "list"}
+
+        delete_all_confirm = str(self.keywords.get("delete_all_confirm", ""))
+        if has_prefix and delete_all_confirm and stripped == delete_all_confirm:
+            return {"type": "delete_all_execute"}
+
+        delete_all = str(self.keywords.get("delete_all", ""))
+        if has_prefix and delete_all and stripped == delete_all:
+            return {"type": "delete_all_confirm"}
 
         menu_generate = str(self.keywords.get("menu_generate", ""))
         if has_prefix and menu_generate and stripped == menu_generate:
@@ -111,7 +120,14 @@ class LineCommandParser:
             if self._is_allowed_char(char):
                 continue
             return False
-        return True
+        return not self.contains_ng_word(text)
+
+    def contains_ng_word(self, text: str) -> bool:
+        """Check whether text contains a denylisted (NG) word."""
+        if not self.ng_words:
+            return False
+        lowered = text.lower()
+        return any(ng_word in lowered for ng_word in self.ng_words)
 
     def _is_allowed_char(self, char: str) -> bool:
         code = ord(char)
